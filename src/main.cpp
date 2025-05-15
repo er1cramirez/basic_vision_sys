@@ -5,7 +5,7 @@
 #include <thread>
 #include <opencv2/opencv.hpp>
 
-#include "../include/ImageSourceFactory.h"
+#include "ImageSourceFactory.h"
 
 // Function to process frames from any source
 void processFrames(ImageSourcePtr source, const std::string& windowName, int maxFrames = 1000) {

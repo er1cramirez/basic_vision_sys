@@ -43,6 +43,11 @@ public:
     int getHeight() const override;
     double getFPS() const override;
     void release() override;
+    // Display all supported camera modes (resolution and FPS)
+    void printCameraModes();
+    
+    // Attempt to set the best available mode
+    bool setBestMode(int targetWidth, int targetHeight, double targetFps);
     
 private:
     cv::VideoCapture capture;  // OpenCV camera capture object

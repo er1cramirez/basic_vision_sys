@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "memory": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "__mutex_base": "cpp",
+        "fstream": "cpp",
+        "locale": "cpp",
+        "ios": "cpp"
+    }
+}

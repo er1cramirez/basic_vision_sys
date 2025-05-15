@@ -17,7 +17,7 @@ find_package(gz-msgs10 REQUIRED)
 
 # Include directories
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/vision/core
     ${OpenCV_INCLUDE_DIRS}
     ${gz-transport13_INCLUDE_DIRS}
     ${gz-msgs10_INCLUDE_DIRS}
@@ -26,8 +26,8 @@ include_directories(
 # Source files
 set(SOURCES
     src/main.cpp
-    src/CameraSource.cpp
-    src/GazeboSource.cpp
+    src/vision/core/CameraSource.cpp
+    src/vision/core/GazeboSource.cpp
 )
 
 # Create executable

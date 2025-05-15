@@ -1,5 +1,4 @@
-// src/GazeboSource.cpp
-#include "../include/GazeboSource.h"
+#include "GazeboSource.h"
 #include <iostream>
 
 GazeboSource::GazeboSource(const std::string& topicName, int width, int height, double fps)
