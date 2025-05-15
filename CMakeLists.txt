@@ -41,6 +41,7 @@ set(LOGGER_SOURCES
 
 set(PIPELINE_SOURCES
     src/vision/pipelines/aruco_pose_pipeline.cpp
+    src/vision/pipelines/aruco_ekf_estimator.cpp
 )
 
 set(MAIN_SOURCES
