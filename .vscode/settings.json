@@ -6,6 +6,7 @@
         "__mutex_base": "cpp",
         "fstream": "cpp",
         "locale": "cpp",
-        "ios": "cpp"
+        "ios": "cpp",
+        "optional": "cpp"
     }
 }
