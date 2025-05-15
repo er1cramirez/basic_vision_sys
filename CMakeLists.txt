@@ -27,21 +27,29 @@ include_directories(
     ${gz-msgs10_INCLUDE_DIRS}
 )
 
-# Main source files
-set(SOURCES
-    src/main.cpp
+# Define source file groups
+set(CORE_SOURCES
     src/vision/core/CameraSource.cpp
     src/vision/core/GazeboSource.cpp
 )
 
-# ArUco pose pipeline files
-set(ARUCO_SOURCES
+set(PIPELINE_SOURCES
     src/vision/pipelines/aruco_pose_pipeline.cpp
+)
+
+set(MAIN_SOURCES
+    src/main.cpp
+)
+
+set(TEST_SOURCES
     src/aruco_pose_test.cpp
 )
 
 # Create main executable
-add_executable(vision_system ${SOURCES})
+add_executable(vision_system 
+    ${MAIN_SOURCES} 
+    ${CORE_SOURCES}
+)
 
 # Link libraries for main executable
 target_link_libraries(vision_system
@@ -51,8 +59,12 @@ target_link_libraries(vision_system
     pthread
 )
 
-# Create ArUco test executable
-add_executable(aruco_pose_test src/aruco_pose_test.cpp src/vision/pipelines/aruco_pose_pipeline.cpp)
+# Create ArUco test executable - include ALL required source files
+add_executable(aruco_pose_test 
+    ${TEST_SOURCES}
+    ${PIPELINE_SOURCES}
+    ${CORE_SOURCES}  # Add core sources which include CameraSource and GazeboSource
+)
 
 # Link libraries for ArUco test
 target_link_libraries(aruco_pose_test

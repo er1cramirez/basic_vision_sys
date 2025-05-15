@@ -8,39 +8,6 @@
 #include "ImageSourceFactory.h"
 #include "aruco_pose_pipeline.h"
 
-// Function to create test camera calibration data (replace with your actual camera calibration)
-CameraCalibration createCalibration() {
-    CameraCalibration calibration;
-    
-    // Example camera matrix (should be replaced with actual calibration data)
-    calibration.cameraMatrix = (cv::Mat_<double>(3, 3) << 
-        700.0, 0.0, 320.0,
-        0.0, 700.0, 240.0,
-        0.0, 0.0, 1.0);
-    
-    // Example distortion coefficients (should be replaced with actual calibration data)
-    calibration.distCoeffs = (cv::Mat_<double>(1, 5) << 0.0, 0.0, 0.0, 0.0, 0.0);
-    
-    return calibration;
-}
-
-// Create a transformation matrix for the drone frame
-Eigen::Matrix4d createDroneTransform() {
-    // Create a transformation from camera to drone frame
-    // This is just an example, replace with your actual transformation
-    
-    // Example: 90-degree rotation around X-axis and translation
-    Eigen::Matrix4d transform = Eigen::Matrix4d::Identity();
-    
-    // Rotation part: 90 degrees around X-axis (camera typically points down on a drone)
-    Eigen::AngleAxisd rotation(M_PI/2, Eigen::Vector3d::UnitX());
-    transform.block<3,3>(0,0) = rotation.toRotationMatrix();
-    
-    // Translation part: 10cm forward, 0cm right, -5cm down from drone center
-    transform.block<3,1>(0,3) = Eigen::Vector3d(0.1, 0.0, -0.05);
-    
-    return transform;
-}
 
 // Display the detection results
 void displayResults(const ArucoPoseResult& result, bool transformed = false) {
@@ -85,8 +52,8 @@ void testArucoDetection(ImageSourcePtr source, const std::string& windowName, in
     
     // Configure settings
     ArucoPoseSettings settings;
-    settings.dictionaryId = cv::aruco::DICT_6X6_250;
-    settings.markerSizeMeters = 0.05;  // 5cm marker
+    settings.dictionaryId = cv::aruco::DICT_5X5_1000;
+    settings.markerSizeMeters = 0.5;  // 5cm marker
     settings.useCornerRefinement = true;
     settings.cornerRefinementMaxIterations = 30;
     settings.cornerRefinementMinAccuracy = 0.01;
@@ -96,11 +63,41 @@ void testArucoDetection(ImageSourcePtr source, const std::string& windowName, in
     // Update pipeline with settings
     pipeline.updateSettings(settings);
     
-    // Set camera calibration
-    pipeline.setCalibration(createCalibration());
+    /*Camera calibration data from gazebo for 640x480:
+    intrinsics {
+  k: 205.46962738037109
+  k: 0
+  k: 320
+  k: 0
+  k: 205.46965599060059
+  k: 240
+  k: 0
+  k: 0
+  k: 1
+}
+*/
+    CameraCalibration calibration;
+    calibration.cameraMatrix = (cv::Mat_<double>(3, 3) << 
+        205.46962738037109, 0.0, 320.0,
+        0.0, 205.46965599060059, 240.0,
+        0.0, 0.0, 1.0);
+    calibration.distCoeffs = (cv::Mat_<double>(1, 5) << 0.0, 0.0, 0.0, 0.0, 0.0);
+    calibration.cameraMatrix.convertTo(calibration.cameraMatrix, CV_64F);
+    calibration.distCoeffs.convertTo(calibration.distCoeffs, CV_64F);
+    pipeline.setCalibration(calibration);
     
     // Create drone reference frame transformation
-    Eigen::Matrix4d droneTransform = createDroneTransform();
+    /*Custom drone transform
+    0, -1, 0, 0//
+    1, 0, 0, 0//
+    0, 0, 1, 0//
+    0, 0, 0, 1*/
+    Eigen::Matrix4d droneTransform;
+    droneTransform << 0, -1, 0, 0,
+                      1, 0, 0, 0,
+                      0, 0, 1, 0,
+                      0, 0, 0, 1;
+    // Set the drone transform in the pipeline
     
     // Main processing loop
     cv::Mat frame;
@@ -196,7 +193,7 @@ void testArucoDetection(ImageSourcePtr source, const std::string& windowName, in
 int main(int argc, char** argv) {
     // Parse command line arguments
     bool useGazebo = true;  // Default to Gazebo for testing
-    std::string gazeboTopic = "/world/default/model/iris/link/camera_link/sensor/camera/image";
+    std::string gazeboTopic = "/world/map/model/iris/link/camera_link/sensor/camera/image";
     
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
