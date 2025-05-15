@@ -21,6 +21,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vision/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vision/pipelines
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/common
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}    # Added Eigen include
     ${gz-transport13_INCLUDE_DIRS}
@@ -31,6 +32,11 @@ include_directories(
 set(CORE_SOURCES
     src/vision/core/CameraSource.cpp
     src/vision/core/GazeboSource.cpp
+)
+
+# Add Logger source file
+set(LOGGER_SOURCES
+    src/common/Logger.cpp
 )
 
 set(PIPELINE_SOURCES
@@ -64,11 +70,13 @@ add_executable(aruco_pose_test
     ${TEST_SOURCES}
     ${PIPELINE_SOURCES}
     ${CORE_SOURCES}  # Add core sources which include CameraSource and GazeboSource
+    ${LOGGER_SOURCES}  # Add Logger source
 )
 
 # Link libraries for ArUco test
 target_link_libraries(aruco_pose_test
     ${OpenCV_LIBS}
+
     ${gz-transport13_LIBRARIES}
     ${gz-msgs10_LIBRARIES}
     pthread

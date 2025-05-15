@@ -4,7 +4,7 @@
 
 // Initialize settings with default values
 ArucoPoseSettings::ArucoPoseSettings()
-    : dictionaryId(cv::aruco::DICT_6X6_250),
+    : dictionaryId(cv::aruco::DICT_5X5_1000),
       useCornerRefinement(true),
       cornerRefinementMaxIterations(30),
       cornerRefinementMinAccuracy(0.01),
@@ -12,7 +12,7 @@ ArucoPoseSettings::ArucoPoseSettings()
       adaptiveThreshWinSizeMax(23),
       adaptiveThreshWinSizeStep(10),
       adaptiveThreshConstant(7.0),
-      markerSizeMeters(0.05),   // 5cm default marker size
+      markerSizeMeters(0.5),   // 50cm default marker size
       maxReprojectionError(2.0),
       debugVisualization(true) {
 }
@@ -161,6 +161,24 @@ cv::Mat ArucoPosePipeline::createDebugVisualization(const cv::Mat& inputImage,
         cv::putText(visual, statusText, cv::Point(10, 30), 
                    cv::FONT_HERSHEY_SIMPLEX, 0.8, statusColor, 2);
         
+        // Draw a cross in the center of the frame
+        int centerX = visual.cols / 2;
+        int centerY = visual.rows / 2;
+        int lineLength = 20; // Length of each arm of the cross
+
+        // Draw horizontal line
+        cv::line(visual, 
+                 cv::Point(centerX - lineLength, centerY),
+                 cv::Point(centerX + lineLength, centerY),
+                 cv::Scalar(0, 0, 255), // Red color (BGR)
+                 2); // Thickness
+
+        // Draw vertical line
+        cv::line(visual, 
+                 cv::Point(centerX, centerY - lineLength),
+                 cv::Point(centerX, centerY + lineLength),
+                 cv::Scalar(0, 0, 255), // Red color (BGR)
+                 2); // Thickness
         // If detection is valid and we have pose information, draw axes
         if (detectionValid && calibration.isValid() && !corners[0].empty()) {
             // Convert Eigen pose back to OpenCV for visualization
