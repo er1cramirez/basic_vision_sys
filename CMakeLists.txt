@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
 find_package(OpenCV REQUIRED)
-find_package(Eigen3 REQUIRED)  # Added Eigen3 requirement
+find_package(Eigen3 REQUIRED)
 
 # Setup environment for Gazebo Harmonic
 set(ENV{GZ_VERSION} "harmonic")
@@ -22,8 +22,10 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vision/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/vision/pipelines
     ${CMAKE_CURRENT_SOURCE_DIR}/include/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/control
     ${OpenCV_INCLUDE_DIRS}
-    ${EIGEN3_INCLUDE_DIR}    # Added Eigen include
+    ${EIGEN3_INCLUDE_DIR}
     ${gz-transport13_INCLUDE_DIRS}
     ${gz-msgs10_INCLUDE_DIRS}
 )
@@ -44,12 +46,21 @@ set(PIPELINE_SOURCES
     src/vision/pipelines/aruco_ekf_estimator.cpp
 )
 
+set(CONTROL_SOURCES
+    src/core/UAVStateMachine.cpp
+    src/control/UAVController.cpp
+)
+
 set(MAIN_SOURCES
     src/main.cpp
 )
 
 set(TEST_SOURCES
     src/aruco_pose_test.cpp
+)
+
+set(CONTROLLER_TEST_SOURCES
+    src/uav_controller_test.cpp
 )
 
 # Create main executable
@@ -66,22 +77,39 @@ target_link_libraries(vision_system
     pthread
 )
 
-# Create ArUco test executable - include ALL required source files
+# Create ArUco test executable
 add_executable(aruco_pose_test 
     ${TEST_SOURCES}
     ${PIPELINE_SOURCES}
-    ${CORE_SOURCES}  # Add core sources which include CameraSource and GazeboSource
-    ${LOGGER_SOURCES}  # Add Logger source
+    ${CORE_SOURCES}
+    ${LOGGER_SOURCES}
 )
 
 # Link libraries for ArUco test
 target_link_libraries(aruco_pose_test
     ${OpenCV_LIBS}
-
     ${gz-transport13_LIBRARIES}
     ${gz-msgs10_LIBRARIES}
     pthread
-    Eigen3::Eigen  # Link Eigen3
+    Eigen3::Eigen
+)
+
+# Create UAV Controller test executable
+add_executable(uav_controller_test 
+    ${CONTROLLER_TEST_SOURCES}
+    ${PIPELINE_SOURCES}
+    ${CORE_SOURCES}
+    ${LOGGER_SOURCES}
+    ${CONTROL_SOURCES}
+)
+
+# Link libraries for UAV Controller test
+target_link_libraries(uav_controller_test
+    ${OpenCV_LIBS}
+    ${gz-transport13_LIBRARIES}
+    ${gz-msgs10_LIBRARIES}
+    pthread
+    Eigen3::Eigen
 )
 
 # Add build-specific compiler optimizations for release builds
@@ -113,3 +141,6 @@ if(CMAKE_BUILD_TYPE MATCHES "Release")
         message(STATUS "Enabling link-time optimization")
     endif()
 endif()
+
+# Create logs directory if it doesn't exist
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
