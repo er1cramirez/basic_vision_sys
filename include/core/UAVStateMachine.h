@@ -14,6 +14,9 @@
  */
 enum class UAVState {
     IDLE,
+    VRPN_HOLD,
+    GPS_HOLD,
+    VISION_HOLD,
     INITIALIZING,
     TAKEOFF,
     HOVER,

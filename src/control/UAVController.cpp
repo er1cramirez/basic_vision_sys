@@ -151,14 +151,6 @@ void UAVController::setupEKFEstimator() {
     
     // Update EKF with configuration
     ekfEstimator.updateConfig(ekfConfig);
-    
-    // Log EKF configuration
-    UAV::logger().Write("EKFC", "TimeUS,PredFreq,PosNoise,VelNoise,MeasNoise", "Qffff",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<float>(ekfConfig.predictionFrequencyHz),
-                       static_cast<float>(ekfConfig.positionProcessNoise),
-                       static_cast<float>(ekfConfig.velocityProcessNoise),
-                       static_cast<float>(ekfConfig.positionMeasurementNoise));
 }
 
 // Start the controller threads

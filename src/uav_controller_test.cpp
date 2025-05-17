@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
     
     // Parse command line arguments
     bool useGazebo = true;    // Default to Gazebo for testing
-    std::string gazeboTopic = "/world/map/model/iris/link/camera_link/sensor/camera/image";
+    std::string gazeboTopic = "/world/iris_runway_aruco/model/iris_with_fixed_camera/model/camera/link/base_link/sensor/camera/image";
     
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to initialize controller" << std::endl;
         return 1;
     }
-    
+     
     std::cout << "Starting controller threads..." << std::endl;
     if (!controller.start()) {
         std::cerr << "Failed to start controller" << std::endl;
