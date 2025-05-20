@@ -45,27 +45,19 @@ public:
     
     /**
      * @brief Compute control output from state estimate
-     * @param state Current state estimate
+     * @param current Current state estimate
      * @param target Target position
      * @return Control output
      */
-    ControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& target) {
-        ControlOutput output;
+    DroneControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& target) {
+        DroneControlOutput output;
         
         // Simple P controller for position
         Eigen::Vector3d error = target - state.position;
-        double kp = 1.0;
-        output.targetVelocity = error * kp;
-        
-        // Limit max velocity
-        double maxVel = 1.0;
-        if (output.targetVelocity.norm() > maxVel) {
-            output.targetVelocity = output.targetVelocity.normalized() * maxVel;
-        }
-        
-        output.targetPosition = target;
-        output.positionControlEnabled = true;
-        output.velocityControlEnabled = true;
+        double kp = -1.0;
+        double kd = -0.1; 
+        output.u_desired = error * kp + (-state.velocity) * kd;
+        output.u_desired_dot = Eigen::Vector3d::Zero(); // No derivative control
         
         return output;
     }
@@ -94,52 +86,14 @@ public:
      * @param targetVel Target velocity
      * @return Control output
      */
-    ControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& targetVel) {
-        ControlOutput output;
+    DroneControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& targetVel) {
+        DroneControlOutput output;
         
         // Simple P controller for velocity
         Eigen::Vector3d error = targetVel - state.velocity;
         double kv = 1.0;
-        output.targetAcceleration = error * kv;
-        
-        // Set target velocity
-        output.targetVelocity = targetVel;
-        output.velocityControlEnabled = true;
-        output.attitudeControlEnabled = true;
-        
-        return output;
-    }
-};
-
-/**
- * @class AttitudeController
- * @brief Controller for attitude control
- */
-class AttitudeController : public ControllerBase {
-public:
-    AttitudeController() = default;
-    ~AttitudeController() override = default;
-    
-    bool initialize() override {
-        return true;
-    }
-    
-    void reset() override {
-        // Reset controller state
-    }
-    
-    /**
-     * @brief Compute control output from state estimate
-     * @param state Current state estimate
-     * @param targetAtt Target attitude (roll, pitch, yaw)
-     * @return Control output
-     */
-    ControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& targetAtt) {
-        ControlOutput output;
-        
-        // Set target attitude
-        output.targetAttitudeRPY = targetAtt;
-        output.attitudeControlEnabled = true;
+        output.u_desired = error * kv;
+        output.u_desired_dot = Eigen::Vector3d::Zero(); // No derivative control
         
         return output;
     }

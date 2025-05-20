@@ -56,28 +56,14 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
     // Create image source
     if (useCamera) {
         imageSource = ImageSourceFactory::createCameraSource();
-        
-        UAV::logger().Write("SRCE", "TimeUS,Type", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Camera");
     } else {
         std::string topic = gazeboTopic.empty() ? 
             "/world/map/model/iris/link/camera_link/sensor/camera/image" : gazeboTopic;
-        
         imageSource = ImageSourceFactory::createGazeboSource(topic);
-        
-        UAV::logger().Write("SRCE", "TimeUS,Type,Topic", "QZZ",
-                           UAV::logger().getMicroseconds(),
-                           "Gazebo",
-                           topic.c_str());
     }
     
     // Initialize image source
     if (!imageSource || !imageSource->initialize()) {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Failed to initialize image source");
-        
         std::cerr << "Failed to initialize image source" << std::endl;
         return false;
     }
@@ -89,19 +75,10 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
     setupEKFEstimator();
     
     // Initialize state machine
-    if (!stateMachine.initialize()) {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Failed to initialize state machine");
-        
+    if (!stateMachine.initialize()) {        
         std::cerr << "Failed to initialize state machine" << std::endl;
         return false;
-    }
-    
-    UAV::logger().Write("INIT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Controller initialized successfully");
-    
+    }    
     return true;
 }
 
@@ -130,14 +107,6 @@ void UAVController::setupArucoPipeline() {
     calibration.cameraMatrix.convertTo(calibration.cameraMatrix, CV_64F);
     calibration.distCoeffs.convertTo(calibration.distCoeffs, CV_64F);
     arucoProcessor.setCalibration(calibration);
-    
-    // Log ArUco configuration
-    UAV::logger().Write("ACFG", "TimeUS,DictID,MarkerSize,UseCornerRef,MaxError", "QIfBf",
-                       UAV::logger().getMicroseconds(),
-                       settings.dictionaryId,
-                       settings.markerSizeMeters,
-                       settings.useCornerRefinement ? 1 : 0,
-                       settings.maxReprojectionError);
 }
 
 // Configure EKF estimator
@@ -160,48 +129,25 @@ bool UAVController::start() {
     if (running) {
         std::cerr << "Controller already running" << std::endl;
         return false;
-    }
-    
+    }    
     // Set running flag
     running = true;
-    
-    // Start threads
-    UAV::logger().Write("STRT", "TimeUS,Message", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Starting controller threads");
     
     visionThread = std::thread(&UAVController::visionThreadFunction, this);
     ekfThread = std::thread(&UAVController::ekfThreadFunction, this);
     controlThread = std::thread(&UAVController::controlThreadFunction, this);
-    displayThread = std::thread(&UAVController::displayThreadFunction, this);
-    
+    displayThread = std::thread(&UAVController::displayThreadFunction, this);    
     return true;
 }
 
 // Stop the controller threads
 void UAVController::stop() {
-    std::lock_guard<std::mutex> lock(controllerMutex);
-    
+    std::lock_guard<std::mutex> lock(controllerMutex);    
     if (!running) {
         return; // Already stopped
-    }
-    
+    }    
     // Clear running flag
-    running = false;
-    
-    // Log shutdown
-    UAV::logger().Write("STOP", "TimeUS,Message", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Stopping controller threads");
-    
-    // Wait for threads to finish
-    join();
-    
-    // Close logger
-    UAV::logger().Write("EXIT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Normal shutdown");
-    
+    running = false;    
     UAV::logger().close();
 }
 
@@ -220,11 +166,7 @@ bool UAVController::isRunning() const {
 }
 
 // Vision thread function
-void UAVController::visionThreadFunction() {
-    UAV::logger().Write("VTHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Vision thread started");
-    
+void UAVController::visionThreadFunction() {    
     // Create drone reference frame transformation
     Eigen::Matrix4d droneTransform;
     droneTransform << 0, -1, 0, 0,
@@ -237,7 +179,7 @@ void UAVController::visionThreadFunction() {
     int frameCount = 0;
     
     while (running) {
-        // Target frame time for ~30 Hz
+        // Target frame time for ~50 Hz
         auto startTime = std::chrono::steady_clock::now();
         
         if (imageSource->getNextFrame(frame)) {
@@ -277,9 +219,9 @@ void UAVController::visionThreadFunction() {
             }
         }
         
-        // Compute elapsed time and sleep to maintain ~30 Hz
+        // Compute elapsed time and sleep to maintain ~50 Hz
         auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(33); // ~30 Hz
+        auto targetFrameTime = std::chrono::milliseconds(20); // 50 Hz target
         
         if (elapsed < targetFrameTime) {
             std::this_thread::sleep_for(targetFrameTime - elapsed);
@@ -363,30 +305,16 @@ void UAVController::ekfThreadFunction() {
         
         // Handle falling behind schedule
         if (nextUpdateTime < std::chrono::steady_clock::now()) {
-            UAV::logger().Write("EWRN", "TimeUS,Warning", "QZ",
-                              UAV::logger().getMicroseconds(),
-                              "EKF thread falling behind schedule");
-            
             // Reset timing to avoid recursive lag
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
     }
-    
-    UAV::logger().Write("ETHR", "TimeUS,Status,PredCount,UpdateCount", "QZII",
-                       UAV::logger().getMicroseconds(),
-                       "EKF thread stopped",
-                       predictionCount,
-                       updateCount);
 }
 
 // Control thread function
 void UAVController::controlThreadFunction() {
-    UAV::logger().Write("CTHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Control thread started");
-    
-    // 100Hz timing (10ms period)
-    const auto updatePeriod = std::chrono::milliseconds(10);
+    // 50Hz timing (20ms period)
+    const auto updatePeriod = std::chrono::milliseconds(20);
     auto nextUpdateTime = std::chrono::steady_clock::now();
     int cycleCount = 0;
     
@@ -403,26 +331,14 @@ void UAVController::controlThreadFunction() {
         
         // Handle falling behind schedule
         if (nextUpdateTime < std::chrono::steady_clock::now()) {
-            UAV::logger().Write("CWRN", "TimeUS,Warning", "QZ",
-                              UAV::logger().getMicroseconds(),
-                              "Control thread falling behind schedule");
-            
             // Reset timing to avoid recursive lag
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
     }
-    
-    UAV::logger().Write("CTHR", "TimeUS,Status,CycleCount", "QZI",
-                       UAV::logger().getMicroseconds(),
-                       "Control thread stopped",
-                       cycleCount);
 }
 
 // Display thread function
 void UAVController::displayThreadFunction() {
-    UAV::logger().Write("DTHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Display thread started");
     
     // Create Windows for display
     cv::namedWindow("ArUco Detection", cv::WINDOW_AUTOSIZE);
@@ -555,52 +471,22 @@ void UAVController::displayThreadFunction() {
 // Command the UAV to take off
 void UAVController::takeoff(float altitude) {
     if (!running) return;
-    
-    UAV::logger().Write("TOFF", "TimeUS,Altitude", "Qf",
-                       UAV::logger().getMicroseconds(),
-                       altitude);
-    
-    // Get current state
-    EKFStateResult state;
-    if (stateData.getData(state) && state.valid) {
-        // Set position target to current XY and requested Z
-        Eigen::Vector3d target = state.position;
-        target.z() = altitude;
-        
-        // Set target position
-        stateMachine.setPositionTarget(target);
-        
-        // Set state to takeoff
-        stateMachine.setState(UAVState::TAKEOFF);
-        stateMachine.setControlMode(ControlMode::POSITION_HOLD);
-    } else {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Cannot takeoff, no valid state estimate");
-    }
+    // Use the FC to take off
+    // Mavlink command to take off
 }
 
 // Command the UAV to land
 void UAVController::land() {
     if (!running) return;
-    
-    UAV::logger().Write("LAND", "TimeUS", "Q",
-                       UAV::logger().getMicroseconds());
-    
-    // Set state to landing
-    stateMachine.setState(UAVState::LANDING);
-    stateMachine.setControlMode(ControlMode::POSITION_HOLD);
+    // Use the FC to land
+    // Mavlink command to land
 }
 
 // Execute emergency stop
 void UAVController::emergencyStop() {
     if (!running) return;
-    
-    UAV::logger().Write("ESTOP", "TimeUS", "Q",
-                       UAV::logger().getMicroseconds());
-    
-    // Set state to emergency
-    stateMachine.setState(UAVState::EMERGENCY);
+    // Use the FC to stop
+    // Mavlink command to stop
 }
 
 // Go to a position
@@ -617,7 +503,7 @@ void UAVController::goToPosition(const Eigen::Vector3d& position) {
     stateMachine.setPositionTarget(position);
     
     // Ensure we're in position hold mode
-    stateMachine.setControlMode(ControlMode::POSITION_HOLD);
+    stateMachine.setControlMode(ControlMode::POSITION_CONTROL);
     
     // Set state to hover (which will follow the position target)
     stateMachine.setState(UAVState::HOVER);
@@ -638,27 +524,4 @@ void UAVController::setVelocity(const Eigen::Vector3d& velocity) {
     
     // Set control mode to velocity control
     stateMachine.setControlMode(ControlMode::VELOCITY_CONTROL);
-}
-
-// Follow waypoints
-void UAVController::followWaypoints(const std::vector<Waypoint>& waypoints) {
-    if (!running) return;
-    
-    if (waypoints.empty()) {
-        UAV::logger().Write("WARN", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Empty waypoint list");
-        return;
-    }
-    
-    UAV::logger().Write("WFOL", "TimeUS,NumWaypoints", "QI",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<int>(waypoints.size()));
-    
-    // Set waypoints in state machine
-    stateMachine.setWaypoints(waypoints);
-    
-    // Set state to waypoint navigation
-    stateMachine.setState(UAVState::WAYPOINT_NAVIGATION);
-    stateMachine.setControlMode(ControlMode::WAYPOINT_FOLLOWING);
 }

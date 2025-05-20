@@ -31,11 +31,8 @@ enum class UAVState {
  */
 enum class ControlMode {
     MANUAL,
-    POSITION_HOLD,
-    VELOCITY_CONTROL,
-    ATTITUDE_CONTROL,
-    WAYPOINT_FOLLOWING,
-    RETURN_TO_HOME
+    POSITION_CONTROL,
+    VELOCITY_CONTROL
 };
 
 /**
@@ -50,7 +47,7 @@ public:
      * @param controlOutput Reference to control output data
      */
     UAVStateMachine(LatestData<EKFStateResult>& stateEstimate,
-                   LatestData<ControlOutput>& controlOutput);
+                   LatestData<DroneControlOutput>& controlOutput);
     
     /**
      * @brief Destructor
@@ -104,11 +101,6 @@ public:
      */
     void setVelocityTarget(const Eigen::Vector3d& velocity);
     
-    /**
-     * @brief Set waypoints for waypoint following
-     * @param waypoints Vector of waypoints
-     */
-    void setWaypoints(const std::vector<Waypoint>& waypoints);
     
 private:
     // State and mode
@@ -117,17 +109,11 @@ private:
     
     // Shared data references
     LatestData<EKFStateResult>& stateEstimate;
-    LatestData<ControlOutput>& controlOutput;
+    LatestData<DroneControlOutput>& controlOutput;
     
     // Controllers
     std::unique_ptr<PositionController> positionController;
     std::unique_ptr<VelocityController> velocityController;
-    std::unique_ptr<AttitudeController> attitudeController;
-    
-    // Mission data
-    std::vector<Waypoint> waypoints;
-    int currentWaypointIndex;
-    bool waypointReached;
     
     // Targets
     Eigen::Vector3d positionTarget;
@@ -143,7 +129,7 @@ private:
     void executeEmergency();
     
     // Control methods
-    ControlOutput computeControlOutput(const EKFStateResult& state);
+    DroneControlOutput computeControlOutput(const EKFStateResult& state);
     bool isPositionReached(const Eigen::Vector3d& current, const Eigen::Vector3d& target, 
                           double threshold = 0.2);
 };

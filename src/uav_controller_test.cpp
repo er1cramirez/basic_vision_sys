@@ -19,7 +19,7 @@
 
 // Global function to create logs directory if it doesn't exist
 void ensureLogDirectoryExists() {
-    std::string dirPath = "logs";
+    std::string dirPath = "~/DroneSimLogs";
     struct stat info;
     
     // Check if directory exists and create it if it doesn't
@@ -33,12 +33,6 @@ void printHelp() {
     std::cout << "\nUAV Control Test Commands:\n"
               << "----------------------------\n"
               << "h, help     - Show this help message\n"
-              << "t, takeoff  - Take off to 1.0m altitude\n"
-              << "l, land     - Land the UAV\n"
-              << "e, emergency- Emergency stop\n"
-              << "p, position - Go to position (0, 0, 1.5)\n"
-              << "w, waypoints- Follow a set of demo waypoints\n"
-              << "v, velocity - Set a demo velocity (0.2, 0, 0)\n"
               << "q, quit     - Quit the program\n"
               << "----------------------------\n";
 }
@@ -108,47 +102,7 @@ int main(int argc, char** argv) {
             case 'H':
                 printHelp();
                 break;
-                
-            case 't':
-            case 'T':
-                std::cout << "Taking off to 1.0m altitude..." << std::endl;
-                controller.takeoff(1.0f);
-                break;
-                
-            case 'l':
-            case 'L':
-                std::cout << "Landing..." << std::endl;
-                controller.land();
-                break;
-                
-            case 'e':
-            case 'E':
-                std::cout << "Emergency stop!" << std::endl;
-                controller.emergencyStop();
-                break;
-                
-            case 'p':
-            case 'P':
-                std::cout << "Going to position (0, 0, 1.5)..." << std::endl;
-                controller.goToPosition(Eigen::Vector3d(0.0, 0.0, 1.5));
-                break;
-                
-            case 'w':
-            case 'W': {
-                std::cout << "Following demo waypoints..." << std::endl;
-                
-                // Create demo waypoints
-                std::vector<Waypoint> waypoints;
-                waypoints.push_back(Waypoint(Eigen::Vector3d(0.0, 0.0, 1.0)));
-                waypoints.push_back(Waypoint(Eigen::Vector3d(1.0, 0.0, 1.0)));
-                waypoints.push_back(Waypoint(Eigen::Vector3d(1.0, 1.0, 1.0)));
-                waypoints.push_back(Waypoint(Eigen::Vector3d(0.0, 1.0, 1.0)));
-                waypoints.push_back(Waypoint(Eigen::Vector3d(0.0, 0.0, 1.0)));
-                
-                controller.followWaypoints(waypoints);
-                break;
-            }
-                
+                  
             case 'v':
             case 'V':
                 std::cout << "Setting velocity to (0.2, 0, 0)..." << std::endl;

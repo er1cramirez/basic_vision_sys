@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find required packages
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
 
 # Setup environment for Gazebo Harmonic
 set(ENV{GZ_VERSION} "harmonic")
@@ -16,6 +17,7 @@ set(ENV{GZ_VERSION} "harmonic")
 find_package(gz-transport13 REQUIRED)
 find_package(gz-msgs10 REQUIRED)
 
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/)
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -24,18 +26,27 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/common
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/control
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
     ${OpenCV_INCLUDE_DIRS}
+    ${MAVLINK_INCLUDE_DIR}
     ${EIGEN3_INCLUDE_DIR}
     ${gz-transport13_INCLUDE_DIRS}
     ${gz-msgs10_INCLUDE_DIRS}
 )
-
+add_compile_options(-Wno-address-of-packed-member)
 # Define source file groups
 set(CORE_SOURCES
     src/vision/core/CameraSource.cpp
     src/vision/core/GazeboSource.cpp
 )
 
+set(MAV_COM_SOURCES
+    src/mavcomm/mavlink_comm_module.cpp
+    src/mavcomm/serial_port.cpp
+    src/mavcomm/udp_port.cpp
+)
+# add_library(mavlink_comm_module STATIC ${MAV_COM_SOURCES})
+# target_link_libraries(mavlink_comm_module Threads::Threads)
 # Add Logger source file
 set(LOGGER_SOURCES
     src/common/Logger.cpp
@@ -83,6 +94,7 @@ add_executable(aruco_pose_test
     ${PIPELINE_SOURCES}
     ${CORE_SOURCES}
     ${LOGGER_SOURCES}
+    ${MAV_COM_SOURCES}
 )
 
 # Link libraries for ArUco test
@@ -101,6 +113,7 @@ add_executable(uav_controller_test
     ${CORE_SOURCES}
     ${LOGGER_SOURCES}
     ${CONTROL_SOURCES}
+    ${MAV_COM_SOURCES}
 )
 
 # Link libraries for UAV Controller test
@@ -108,7 +121,7 @@ target_link_libraries(uav_controller_test
     ${OpenCV_LIBS}
     ${gz-transport13_LIBRARIES}
     ${gz-msgs10_LIBRARIES}
-    pthread
+    Threads::Threads
     Eigen3::Eigen
 )
 

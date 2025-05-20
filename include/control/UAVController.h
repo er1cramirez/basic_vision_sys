@@ -90,11 +90,6 @@ public:
      */
     void setVelocity(const Eigen::Vector3d& velocity);
     
-    /**
-     * @brief Follow waypoints
-     * @param waypoints List of waypoints to follow
-     */
-    void followWaypoints(const std::vector<Waypoint>& waypoints);
     
 private:
     // Thread synchronization
@@ -110,7 +105,7 @@ private:
     // Thread data exchange
     LatestData<ArucoPoseResult> arucoData;
     LatestData<EKFStateResult> stateData;
-    LatestData<ControlOutput> controlData;
+    LatestData<DroneControlOutput> controlData;
     
     // System components
     ImageSourcePtr imageSource;  // Use your existing ImageSourcePtr
