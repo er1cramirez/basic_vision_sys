@@ -29,6 +29,14 @@ bool UAVStateMachine::initialize() {
                        UAV::logger().getMicroseconds(),
                        "UAVStateMachine");
     
+    // Create and configure controllers
+    positionController = std::make_unique<PositionController>();
+    velocityController = std::make_unique<VelocityController>();
+    
+    // Set PD controller gains (these will need tuning)
+    dynamic_cast<PositionController*>(positionController.get())->setGains(0.1, 0.05);
+    dynamic_cast<PositionController*>(positionController.get())->setMaxControl(0.4);
+    
     // Initialize controllers
     if (!positionController->initialize() ||
         !velocityController->initialize()) {
@@ -44,12 +52,15 @@ void UAVStateMachine::execute() {
     EKFStateResult state;
     bool hasState = stateEstimate.getData(state);
     
-    if (!hasState && currentState != UAVState::IDLE) {
-        // No state information available, but we're supposed to be operating
-        // Log warning and consider emergency action
-        
-        // If state has been unavailable for too long, we might want to go to emergency mode
-        // This would require tracking how long we've been without a state update
+    // Add timeout handling for safety
+    if (!hasState && currentState != UAVState::IDLE && currentState != UAVState::EMERGENCY) {
+        int64_t timeSinceUpdate = stateEstimate.timeSinceUpdate();
+        if (timeSinceUpdate > 500) {  // 500ms timeout
+            setState(UAVState::EMERGENCY);
+            UAV::logger().Write("EMRG", "TimeUS,Reason", "QZ",
+                              UAV::logger().getMicroseconds(),
+                              "State estimate timeout");
+        }
     }
     
     // Execute appropriate state behavior
@@ -60,10 +71,7 @@ void UAVStateMachine::execute() {
         case UAVState::INITIALIZING:
             executeInitializing();
             break;
-        case UAVState::TAKEOFF:
-            executeTakeoff();
-            break;
-        case UAVState::HOVER:
+        case UAVState::HOVER:  // Primary position control state
             executeHover();
             break;
         case UAVState::LANDING:
@@ -72,12 +80,30 @@ void UAVStateMachine::execute() {
         case UAVState::EMERGENCY:
             executeEmergency();
             break;
+        default:
+            break;
     }
     
     // If we have state information, compute and output control commands
-    if (hasState) {
+    if (hasState && currentState != UAVState::IDLE) {
         DroneControlOutput control = computeControlOutput(state);
         controlOutput.update(control);
+        
+        // Log control output periodically
+        static int logCounter = 0;
+        if (++logCounter % 10 == 0) {  // Log every 10th control cycle
+            UAV::logger().Write("CTRL", "TimeUS,PosX,PosY,PosZ,TgtX,TgtY,TgtZ,UX,UY,UZ", "Qfffffffffff",
+                              UAV::logger().getMicroseconds(),
+                              static_cast<float>(state.position.x()),
+                              static_cast<float>(state.position.y()),
+                              static_cast<float>(state.position.z()),
+                              static_cast<float>(positionTarget.x()),
+                              static_cast<float>(positionTarget.y()),
+                              static_cast<float>(positionTarget.z()),
+                              static_cast<float>(control.u_desired.x()),
+                              static_cast<float>(control.u_desired.y()),
+                              static_cast<float>(control.u_desired.z()));
+        }
     }
 }
 
@@ -116,7 +142,22 @@ void UAVStateMachine::executeTakeoff() {
 // State: Hover
 void UAVStateMachine::executeHover() {
     // In hover state, we maintain position at the positionTarget
-    // The control output is computed in computeControlOutput
+    EKFStateResult state;
+    if (stateEstimate.getData(state)) {
+        // Check if we're close to target
+        static bool positionReachedLogged = false;
+        if (isPositionReached(state.position, positionTarget)) {
+            positionReachedLogged = false;
+            if (!positionReachedLogged) {
+                UAV::logger().Write("POSN", "TimeUS,Status", "QZ",
+                                  UAV::logger().getMicroseconds(),
+                                  "Position target reached");
+                positionReachedLogged = true;
+            }
+        } else {
+            positionReachedLogged = false;
+        }
+    }
 }
 // State: Landing
 void UAVStateMachine::executeLanding() {

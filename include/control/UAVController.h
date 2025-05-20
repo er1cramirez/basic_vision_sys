@@ -8,6 +8,8 @@
 #include "Logger.h"
 #include "ImageSourceInterface.h" // Use your existing interface
 
+#include "mavlink_comm_module.h"
+
 #include <thread>
 #include <atomic>
 #include <functional>
@@ -92,6 +94,10 @@ public:
     
     
 private:
+    // Thread timing constants
+    const double VISION_FREQ_HZ = 50.0;   // 50Hz for vision
+    const double EKF_FREQ_HZ = 100.0;     // 100Hz for EKF
+    const double CONTROL_FREQ_HZ = 50.0;  // 50Hz for control
     // Thread synchronization
     std::atomic<bool> running;
     std::mutex controllerMutex;
@@ -109,6 +115,15 @@ private:
     
     // System components
     ImageSourcePtr imageSource;  // Use your existing ImageSourcePtr
+    // Create communication module
+    std::unique_ptr<MavlinkCommModule> commModule;
+    std::string serialDevice = "/dev/ttyUSB0";
+    int serialBaud = 57600;
+    double frequency = 10.0;
+    uint8_t systemId = 255;
+    uint8_t componentId = 1;
+    uint8_t targetSystemId = 1;
+    uint8_t targetComponentId = 0;
     ArucoPosePipeline arucoProcessor;
     ArucoEKFEstimator ekfEstimator;
     UAVStateMachine stateMachine;
@@ -122,6 +137,8 @@ private:
     void ekfThreadFunction();
     void controlThreadFunction();
     void displayThreadFunction();
+
+    void sendControlToMAVLink(const DroneControlOutput& control);
     
     // Helper functions
     void createLogDirectory();

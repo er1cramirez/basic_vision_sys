@@ -32,7 +32,7 @@ public:
  */
 class PositionController : public ControllerBase {
 public:
-    PositionController() = default;
+    PositionController() : kp(2.0), kd(0.5), maxControl(1.0) {}
     ~PositionController() override = default;
     
     bool initialize() override {
@@ -44,23 +44,53 @@ public:
     }
     
     /**
+     * @brief Set the controller gains
+     * @param proportionalGain Proportional gain (kp)
+     * @param derivativeGain Derivative gain (kd)
+     */
+    void setGains(double proportionalGain, double derivativeGain) {
+        kp = proportionalGain;
+        kd = derivativeGain;
+    }
+    
+    /**
+     * @brief Set maximum control output magnitude
+     * @param max Maximum control magnitude
+     */
+    void setMaxControl(double max) {
+        maxControl = max;
+    }
+    
+    /**
      * @brief Compute control output from state estimate
-     * @param current Current state estimate
+     * @param state Current state estimate
      * @param target Target position
      * @return Control output
      */
     DroneControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& target) {
         DroneControlOutput output;
         
-        // Simple P controller for position
+        // PD controller: u = kp(pos_error) + kd(-vel)
         Eigen::Vector3d error = target - state.position;
-        double kp = -1.0;
-        double kd = -0.1; 
+        
+        // PD control calculation
         output.u_desired = error * kp + (-state.velocity) * kd;
-        output.u_desired_dot = Eigen::Vector3d::Zero(); // No derivative control
+        
+        // Limit control output magnitude if needed
+        if (output.u_desired.norm() > maxControl) {
+            output.u_desired = output.u_desired.normalized() * maxControl;
+        }
+        
+        // Set u_desired_dot to zeros as specified
+        output.u_desired_dot = Eigen::Vector3d::Zero();
         
         return output;
     }
+    
+private:
+    double kp;  // Proportional gain
+    double kd;  // Derivative gain
+    double maxControl;  // Maximum control output magnitude
 };
 
 /**

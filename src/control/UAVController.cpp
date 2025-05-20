@@ -32,7 +32,7 @@ UAVController::~UAVController() {
 }
 
 // Initialize the controller
-bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
+bool UAVController::initialize(const std::string& gazeboTopic, bool useRealDrone) {
     std::lock_guard<std::mutex> lock(controllerMutex);
     
     if (running) {
@@ -53,18 +53,44 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
                        UAV::logger().getMicroseconds(),
                        "UAV Controller 1.0");
     
-    // Create image source
-    if (useCamera) {
+    // Create image source and MAVLink communication
+    if (useRealDrone) {
+        // Use physical camera for real drone
         imageSource = ImageSourceFactory::createCameraSource();
+        
+        // Create Serial MAVLink communication
+        commModule = std::make_unique<MavlinkCommModule>(
+            serialDevice, serialBaud, 
+            systemId, componentId,
+            targetSystemId, targetComponentId, 
+            true); // true for serial
+        
+        std::cout << "Using real drone with serial communication on " << serialDevice << std::endl;
     } else {
+        // Use Gazebo camera for simulation
         std::string topic = gazeboTopic.empty() ? 
             "/world/map/model/iris/link/camera_link/sensor/camera/image" : gazeboTopic;
         imageSource = ImageSourceFactory::createGazeboSource(topic);
+
+        // Create UDP MAVLink communication for simulation
+        commModule = std::make_unique<MavlinkCommModule>(
+            "127.0.0.1", 14550,  // Default simulator IP and port
+            systemId, componentId,
+            targetSystemId, targetComponentId);
+        
+        std::cout << "Using simulated drone with UDP communication" << std::endl;
     }
     
     // Initialize image source
     if (!imageSource || !imageSource->initialize()) {
         std::cerr << "Failed to initialize image source" << std::endl;
+        return false;
+    }
+    
+    // Configure and start MAVLink communication
+    commModule->setFrequency(CONTROL_FREQ_HZ);
+    if (!commModule->start()) {
+        std::cerr << "Failed to start MAVLink communication" << std::endl;
         return false;
     }
     
@@ -78,7 +104,8 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
     if (!stateMachine.initialize()) {        
         std::cerr << "Failed to initialize state machine" << std::endl;
         return false;
-    }    
+    }
+    
     return true;
 }
 
@@ -145,7 +172,13 @@ void UAVController::stop() {
     std::lock_guard<std::mutex> lock(controllerMutex);    
     if (!running) {
         return; // Already stopped
-    }    
+    }
+    
+    // Stop MAVLink communication
+    if (commModule) {
+        commModule->stop();
+    }
+    
     // Clear running flag
     running = false;    
     UAV::logger().close();
@@ -167,6 +200,9 @@ bool UAVController::isRunning() const {
 
 // Vision thread function
 void UAVController::visionThreadFunction() {    
+    // Precise timing for 50Hz
+    const auto frameTime = std::chrono::microseconds(static_cast<int64_t>(1000000.0 / VISION_FREQ_HZ));
+    
     // Create drone reference frame transformation
     Eigen::Matrix4d droneTransform;
     droneTransform << 0, -1, 0, 0,
@@ -219,12 +255,10 @@ void UAVController::visionThreadFunction() {
             }
         }
         
-        // Compute elapsed time and sleep to maintain ~50 Hz
+        // Precise timing control
         auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(20); // 50 Hz target
-        
-        if (elapsed < targetFrameTime) {
-            std::this_thread::sleep_for(targetFrameTime - elapsed);
+        if (elapsed < frameTime) {
+            std::this_thread::sleep_for(frameTime - elapsed);
         }
     }
     
@@ -235,12 +269,12 @@ void UAVController::visionThreadFunction() {
 
 // EKF thread function
 void UAVController::ekfThreadFunction() {
+    // Precise timing for 100Hz
+    const auto updatePeriod = std::chrono::microseconds(static_cast<int64_t>(1000000.0 / EKF_FREQ_HZ));
+    
     UAV::logger().Write("ETHR", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "EKF thread started");
-    
-    // 100Hz timing (10ms period)
-    const auto updatePeriod = std::chrono::milliseconds(10);
     auto nextUpdateTime = std::chrono::steady_clock::now();
     
     ArucoPoseResult latestAruco;
@@ -311,29 +345,59 @@ void UAVController::ekfThreadFunction() {
     }
 }
 
-// Control thread function
+// Modified control thread function
 void UAVController::controlThreadFunction() {
-    // 50Hz timing (20ms period)
-    const auto updatePeriod = std::chrono::milliseconds(20);
+    // 50Hz timing
+    const auto updatePeriod = std::chrono::microseconds(static_cast<int64_t>(1000000.0 / CONTROL_FREQ_HZ));
     auto nextUpdateTime = std::chrono::steady_clock::now();
-    int cycleCount = 0;
     
     while (running) {
-        // Wait until next scheduled update
         std::this_thread::sleep_until(nextUpdateTime);
         
-        // Execute one cycle of the state machine
+        // Execute state machine
         stateMachine.execute();
-        cycleCount++;
+        
+        // Get latest control output and send to drone
+        DroneControlOutput control;
+        if (controlData.getData(control)) {
+            std::cout << "Sending control output to MAVLink" << std::endl;
+            sendControlToMAVLink(control);
+        }
         
         // Schedule next update
         nextUpdateTime += updatePeriod;
         
-        // Handle falling behind schedule
+        // Handle falling behind
         if (nextUpdateTime < std::chrono::steady_clock::now()) {
-            // Reset timing to avoid recursive lag
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
+    }
+}
+
+void UAVController::sendControlToMAVLink(const DroneControlOutput& control) {
+    if (commModule && commModule->isRunning()) {
+        // Convert Eigen vectors to float values
+        float force_x = static_cast<float>(control.u_desired.x());
+        float force_y = static_cast<float>(control.u_desired.y());
+        float force_z = static_cast<float>(control.u_desired.z());
+        
+        float force_derivative_x = static_cast<float>(control.u_desired_dot.x());
+        float force_derivative_y = static_cast<float>(control.u_desired_dot.y());
+        float force_derivative_z = static_cast<float>(control.u_desired_dot.z());
+        
+        // Send to MAVLink
+        commModule->setForceVector(
+            force_x, force_y, force_z,
+            force_derivative_x, force_derivative_y, force_derivative_z
+        );
+        
+        // Log the data
+        UAV::logger().Write("MAVL", "TimeUS,FX,FY,FZ,DFX,DFY,DFZ", "Qffffff",
+                          UAV::logger().getMicroseconds(),
+                          force_x, force_y, force_z,
+                          force_derivative_x, force_derivative_y, force_derivative_z);
+    } else {
+        std::cerr << "Warning: MAVLink module not available or not running" << std::endl;
     }
 }
 
