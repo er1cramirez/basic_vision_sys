@@ -7,6 +7,7 @@
 #include "aruco_ekf_estimator.h"
 #include "Logger.h"
 #include "ImageSourceInterface.h" // Use your existing interface
+#include "mavlink_comm_module.h"
 
 #include <thread>
 #include <atomic>
@@ -79,6 +80,7 @@ private:
     LatestData<ControlOutput> controlData;
     
     // System components
+    std::unique_ptr<MavlinkCommModule> mavlinkModule;
     ImageSourcePtr imageSource;  // Use your existing ImageSourcePtr
     ArucoPosePipeline arucoProcessor;
     ArucoEKFEstimator ekfEstimator;

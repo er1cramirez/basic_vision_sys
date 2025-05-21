@@ -54,8 +54,8 @@ public:
         
         // Simple P controller for position
         Eigen::Vector3d error = target - state.position;
-        double kp = 0.1;
-        double kd = 0.05;
+        double kp = 0.02;
+        double kd = 0.035;
         output.u_desired = error * kp + (-state.velocity * kd);
         
         output.u_desired_dot = Eigen::Vector3d::Zero(); // No acceleration control

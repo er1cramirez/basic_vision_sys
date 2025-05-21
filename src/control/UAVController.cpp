@@ -1,6 +1,7 @@
 #include "UAVController.h"
 #include "ImageSourceFactory.h"
 #include "Logger.h"
+#include "parameters.h"
 
 #include <iostream>
 #include <chrono>
@@ -20,7 +21,7 @@ UAVController::UAVController()
     std::stringstream ss;
     ss << "uav_control_" << std::put_time(std::localtime(&time_t_now), "%Y%m%d_%H%M%S");
     logPrefix = ss.str();
-    logDirectory = "~/simLogs";
+    logDirectory = "/home/eric/simLogs";
 }
 
 // Destructor
@@ -101,6 +102,30 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
     UAV::logger().Write("INIT", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "Controller initialized successfully");
+
+    // Initialize MAVLink communication if requested
+    if (UAV_Parameters::IS_SIMULATOR) {
+        try {
+            // Create UDP MAVLink module (you can add serial option if needed)
+            mavlinkModule = std::make_unique<MavlinkCommModule>(
+                UAV_Parameters::UDP_IP, UAV_Parameters::GZ_MAV_PORT, 
+                UAV_Parameters::SYS_ID, UAV_Parameters::COMP_ID,
+                UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP);
+            
+            // Set the frequency to match control thread (100Hz)
+            mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
+            
+            UAV::logger().Write("MAVL", "TimeUS,IP,Port", "QZI",
+                               UAV::logger().getMicroseconds(),
+                               UAV_Parameters::UDP_IP.c_str(),
+                               UAV_Parameters::GZ_MAV_PORT);
+        } catch (const std::exception& e) {
+            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
+                               UAV::logger().getMicroseconds(),
+                               e.what());
+            return false;
+        }
+    }
     
     return true;
 }
@@ -146,7 +171,7 @@ void UAVController::setupEKFEstimator() {
     EKFEstimatorConfig ekfConfig;
     ekfConfig.predictionFrequencyHz = 100.0;  // 100 Hz prediction rate
     ekfConfig.positionProcessNoise = 0.01;    // Position process noise
-    ekfConfig.velocityProcessNoise = 0.1;     // Velocity process noise
+    ekfConfig.velocityProcessNoise = 0.01;     // Velocity process noise
     ekfConfig.positionMeasurementNoise = 0.01; // Position measurement noise
     
     // Update EKF with configuration
@@ -173,6 +198,19 @@ bool UAVController::start() {
     // Set running flag
     running = true;
     
+    // Start MAVLink module if it exists
+    if (mavlinkModule) {
+        if (!mavlinkModule->start()) {
+            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
+                               UAV::logger().getMicroseconds(),
+                               "Failed to start MAVLink communication");
+            return false;
+        }
+        
+        UAV::logger().Write("MAVL", "TimeUS,Status", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "MAVLink communication started");
+    }
     // Start threads
     UAV::logger().Write("STRT", "TimeUS,Message", "QZ",
                        UAV::logger().getMicroseconds(),
@@ -182,6 +220,7 @@ bool UAVController::start() {
     ekfThread = std::thread(&UAVController::ekfThreadFunction, this);
     controlThread = std::thread(&UAVController::controlThreadFunction, this);
     displayThread = std::thread(&UAVController::displayThreadFunction, this);
+
     
     return true;
 }
@@ -204,6 +243,12 @@ void UAVController::stop() {
     
     // Wait for threads to finish
     join();
+    if (mavlinkModule) {
+        mavlinkModule->stop();
+        UAV::logger().Write("MAVL", "TimeUS,Status", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "MAVLink communication stopped");
+    }
     
     // Close logger
     UAV::logger().Write("EXIT", "TimeUS,Status", "QZ",
@@ -405,6 +450,30 @@ void UAVController::controlThreadFunction() {
         // Execute one cycle of the state machine
         stateMachine.execute();
         cycleCount++;
+
+        if (mavlinkModule) {
+            ControlOutput control;
+            if (controlData.getData(control)) {
+                // Update MAVLink module with control output
+                mavlinkModule->setForceVector(
+                    static_cast<float>(control.u_desired.x()),
+                    static_cast<float>(control.u_desired.y()),
+                    static_cast<float>(control.u_desired.z()),
+                    static_cast<float>(control.u_desired_dot.x()),
+                    static_cast<float>(control.u_desired_dot.y()),
+                    static_cast<float>(control.u_desired_dot.z())
+                );
+                
+                // Log force vector sent to MAVLink (every 10th update)
+                if (cycleCount % 10 == 0) {
+                    UAV::logger().Write("MAVF", "TimeUS,Fx,Fy,Fz", "Qfff",
+                                      UAV::logger().getMicroseconds(),
+                                      static_cast<float>(control.u_desired.x()),
+                                      static_cast<float>(control.u_desired.y()),
+                                      static_cast<float>(control.u_desired.z()));
+                }
+            }
+        }
         
         // Schedule next update
         nextUpdateTime += updatePeriod;
