@@ -79,35 +79,35 @@ set(CONTROLLER_TEST_SOURCES
 )
 
 # Create main executable
-add_executable(vision_system 
-    ${MAIN_SOURCES} 
-    ${CORE_SOURCES}
-)
+# add_executable(vision_system 
+#     ${MAIN_SOURCES} 
+#     ${CORE_SOURCES}
+# )
 
-# Link libraries for main executable
-target_link_libraries(vision_system
-    ${OpenCV_LIBS}
-    ${gz-transport13_LIBRARIES}
-    ${gz-msgs10_LIBRARIES}
-    pthread
-)
+# # Link libraries for main executable
+# target_link_libraries(vision_system
+#     ${OpenCV_LIBS}
+#     ${gz-transport13_LIBRARIES}
+#     ${gz-msgs10_LIBRARIES}
+#     pthread
+# )
 
-# Create ArUco test executable
-add_executable(aruco_pose_test 
-    ${TEST_SOURCES}
-    ${PIPELINE_SOURCES}
-    ${CORE_SOURCES}
-    ${LOGGER_SOURCES}
-)
+# # Create ArUco test executable
+# add_executable(aruco_pose_test 
+#     ${TEST_SOURCES}
+#     ${PIPELINE_SOURCES}
+#     ${CORE_SOURCES}
+#     ${LOGGER_SOURCES}
+# )
 
-# Link libraries for ArUco test
-target_link_libraries(aruco_pose_test
-    ${OpenCV_LIBS}
-    ${gz-transport13_LIBRARIES}
-    ${gz-msgs10_LIBRARIES}
-    pthread
-    Eigen3::Eigen
-)
+# # Link libraries for ArUco test
+# target_link_libraries(aruco_pose_test
+#     ${OpenCV_LIBS}
+#     ${gz-transport13_LIBRARIES}
+#     ${gz-msgs10_LIBRARIES}
+#     pthread
+#     Eigen3::Eigen
+# )
 
 # Create UAV Controller test executable
 add_executable(uav_controller_test 
@@ -116,6 +116,7 @@ add_executable(uav_controller_test
     ${CORE_SOURCES}
     ${LOGGER_SOURCES}
     ${CONTROL_SOURCES}
+    ${MAV_COM_SOURCES}
 )
 
 # Link libraries for UAV Controller test
