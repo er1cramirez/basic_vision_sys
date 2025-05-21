@@ -15,11 +15,7 @@
 enum class UAVState {
     IDLE,
     INITIALIZING,
-    TAKEOFF,
-    HOVER,
-    WAYPOINT_NAVIGATION,
-    LANDING,
-    EMERGENCY
+    HOVER
 };
 
 /**
@@ -28,11 +24,7 @@ enum class UAVState {
  */
 enum class ControlMode {
     MANUAL,
-    POSITION_HOLD,
-    VELOCITY_CONTROL,
-    ATTITUDE_CONTROL,
-    WAYPOINT_FOLLOWING,
-    RETURN_TO_HOME
+    POSITION_HOLD
 };
 
 /**
@@ -95,17 +87,6 @@ public:
      */
     void setPositionTarget(const Eigen::Vector3d& position);
     
-    /**
-     * @brief Set velocity target for velocity control
-     * @param velocity Target velocity
-     */
-    void setVelocityTarget(const Eigen::Vector3d& velocity);
-    
-    /**
-     * @brief Set waypoints for waypoint following
-     * @param waypoints Vector of waypoints
-     */
-    void setWaypoints(const std::vector<Waypoint>& waypoints);
     
 private:
     // State and mode
@@ -118,31 +99,17 @@ private:
     
     // Controllers
     std::unique_ptr<PositionController> positionController;
-    std::unique_ptr<VelocityController> velocityController;
-    std::unique_ptr<AttitudeController> attitudeController;
-    
-    // Mission data
-    std::vector<Waypoint> waypoints;
-    int currentWaypointIndex;
-    bool waypointReached;
     
     // Targets
     Eigen::Vector3d positionTarget;
-    Eigen::Vector3d velocityTarget;
     
     // State execution methods
     void executeIdle();
     void executeInitializing();
-    void executeTakeoff();
     void executeHover();
-    void executeWaypointNavigation();
-    void executeLanding();
-    void executeEmergency();
     
     // Control methods
     ControlOutput computeControlOutput(const EKFStateResult& state);
-    bool isPositionReached(const Eigen::Vector3d& current, const Eigen::Vector3d& target, 
-                          double threshold = 0.2);
 };
 
 #endif // UAV_STATE_MACHINE_H

@@ -62,40 +62,6 @@ public:
      */
     bool isRunning() const;
     
-    /**
-     * @brief Command the UAV to take off
-     * @param altitude Target altitude for takeoff
-     */
-    void takeoff(float altitude);
-    
-    /**
-     * @brief Command the UAV to land
-     */
-    void land();
-    
-    /**
-     * @brief Execute emergency stop
-     */
-    void emergencyStop();
-    
-    /**
-     * @brief Go to a position
-     * @param position Target position
-     */
-    void goToPosition(const Eigen::Vector3d& position);
-    
-    /**
-     * @brief Set velocity
-     * @param velocity Target velocity
-     */
-    void setVelocity(const Eigen::Vector3d& velocity);
-    
-    /**
-     * @brief Follow waypoints
-     * @param waypoints List of waypoints to follow
-     */
-    void followWaypoints(const std::vector<Waypoint>& waypoints);
-    
 private:
     // Thread synchronization
     std::atomic<bool> running;
@@ -129,7 +95,6 @@ private:
     void displayThreadFunction();
     
     // Helper functions
-    void createLogDirectory();
     void setupArucoPipeline();
     void setupEKFEstimator();
 };

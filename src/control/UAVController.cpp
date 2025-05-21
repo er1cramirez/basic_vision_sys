@@ -20,7 +20,7 @@ UAVController::UAVController()
     std::stringstream ss;
     ss << "uav_control_" << std::put_time(std::localtime(&time_t_now), "%Y%m%d_%H%M%S");
     logPrefix = ss.str();
-    logDirectory = "logs";
+    logDirectory = "~/simLogs";
 }
 
 // Destructor
@@ -560,113 +560,5 @@ void UAVController::displayThreadFunction() {
                        "Display thread stopped");
 }
 
-// Command the UAV to take off
-void UAVController::takeoff(float altitude) {
-    if (!running) return;
-    
-    UAV::logger().Write("TOFF", "TimeUS,Altitude", "Qf",
-                       UAV::logger().getMicroseconds(),
-                       altitude);
-    
-    // Get current state
-    EKFStateResult state;
-    if (stateData.getData(state) && state.valid) {
-        // Set position target to current XY and requested Z
-        Eigen::Vector3d target = state.position;
-        target.z() = altitude;
-        
-        // Set target position
-        stateMachine.setPositionTarget(target);
-        
-        // Set state to takeoff
-        stateMachine.setState(UAVState::TAKEOFF);
-        stateMachine.setControlMode(ControlMode::POSITION_HOLD);
-    } else {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Cannot takeoff, no valid state estimate");
-    }
-}
 
-// Command the UAV to land
-void UAVController::land() {
-    if (!running) return;
-    
-    UAV::logger().Write("LAND", "TimeUS", "Q",
-                       UAV::logger().getMicroseconds());
-    
-    // Set state to landing
-    stateMachine.setState(UAVState::LANDING);
-    stateMachine.setControlMode(ControlMode::POSITION_HOLD);
-}
 
-// Execute emergency stop
-void UAVController::emergencyStop() {
-    if (!running) return;
-    
-    UAV::logger().Write("ESTOP", "TimeUS", "Q",
-                       UAV::logger().getMicroseconds());
-    
-    // Set state to emergency
-    stateMachine.setState(UAVState::EMERGENCY);
-}
-
-// Go to a position
-void UAVController::goToPosition(const Eigen::Vector3d& position) {
-    if (!running) return;
-    
-    UAV::logger().Write("GOTO", "TimeUS,X,Y,Z", "Qfff",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<float>(position.x()),
-                       static_cast<float>(position.y()),
-                       static_cast<float>(position.z()));
-    
-    // Set position target
-    stateMachine.setPositionTarget(position);
-    
-    // Ensure we're in position hold mode
-    stateMachine.setControlMode(ControlMode::POSITION_HOLD);
-    
-    // Set state to hover (which will follow the position target)
-    stateMachine.setState(UAVState::HOVER);
-}
-
-// Set velocity
-void UAVController::setVelocity(const Eigen::Vector3d& velocity) {
-    if (!running) return;
-    
-    UAV::logger().Write("SVEL", "TimeUS,VX,VY,VZ", "Qfff",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<float>(velocity.x()),
-                       static_cast<float>(velocity.y()),
-                       static_cast<float>(velocity.z()));
-    
-    // Set velocity target
-    stateMachine.setVelocityTarget(velocity);
-    
-    // Set control mode to velocity control
-    stateMachine.setControlMode(ControlMode::VELOCITY_CONTROL);
-}
-
-// Follow waypoints
-void UAVController::followWaypoints(const std::vector<Waypoint>& waypoints) {
-    if (!running) return;
-    
-    if (waypoints.empty()) {
-        UAV::logger().Write("WARN", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Empty waypoint list");
-        return;
-    }
-    
-    UAV::logger().Write("WFOL", "TimeUS,NumWaypoints", "QI",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<int>(waypoints.size()));
-    
-    // Set waypoints in state machine
-    stateMachine.setWaypoints(waypoints);
-    
-    // Set state to waypoint navigation
-    stateMachine.setState(UAVState::WAYPOINT_NAVIGATION);
-    stateMachine.setControlMode(ControlMode::WAYPOINT_FOLLOWING);
-}
