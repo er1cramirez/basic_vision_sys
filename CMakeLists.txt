@@ -16,6 +16,14 @@ set(ENV{GZ_VERSION} "harmonic")
 find_package(gz-transport13 REQUIRED)
 find_package(gz-msgs10 REQUIRED)
 
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/)
+# Include directories
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
+    ${MAVLINK_INCLUDE_DIR}
+)
+add_compile_options(-Wno-address-of-packed-member)
+
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -24,6 +32,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/common
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/control
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
     ${gz-transport13_INCLUDE_DIRS}
@@ -31,6 +40,12 @@ include_directories(
 )
 
 # Define source file groups
+
+set(MAV_COM_SOURCES
+    src/mavcomm/mavlink_comm_module.cpp
+    src/mavcomm/serial_port.cpp
+    src/mavcomm/udp_port.cpp
+)
 set(CORE_SOURCES
     src/vision/core/CameraSource.cpp
     src/vision/core/GazeboSource.cpp

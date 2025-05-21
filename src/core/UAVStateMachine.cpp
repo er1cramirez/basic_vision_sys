@@ -75,6 +75,7 @@ void UAVStateMachine::execute() {
     if (hasState) {
         ControlOutput control = computeControlOutput(state);
         controlOutput.update(control);
+        // Update mavlink control output
         UAV::logger().Write("CTRL", "TimeUS,u_x,u_y,u_z", "Qfff",
                            UAV::logger().getMicroseconds(),
                            static_cast<float>(control.u_desired.x()),
