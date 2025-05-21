@@ -84,7 +84,7 @@ public:
         const std::string& topicName = "/world/default/model/iris/link/camera_link/sensor/camera/image",
         int width = 0,
         int height = 0,
-        double fps = 30.0) {
+        double fps = 50.0) {
         
         return std::make_shared<GazeboSource>(topicName, width, height, fps);
     }

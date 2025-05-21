@@ -287,7 +287,7 @@ void UAVController::visionThreadFunction() {
         
         // Compute elapsed time and sleep to maintain ~30 Hz
         auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(33); // ~30 Hz
+        auto targetFrameTime = std::chrono::milliseconds(20); // ~30 Hz
         
         if (elapsed < targetFrameTime) {
             std::this_thread::sleep_for(targetFrameTime - elapsed);
