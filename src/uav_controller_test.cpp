@@ -49,6 +49,7 @@ int main(int argc, char** argv) {
     
     // Initialize controller
     UAVController controller;
+    controller.setVisualization(false); // Disable visualization by default
     
     std::cout << "Initializing UAV controller..." << std::endl;
     if (!controller.initialize()) {

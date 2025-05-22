@@ -12,6 +12,7 @@
 // Constructor
 UAVController::UAVController()
     : running(false),
+      visualizationEnabled(false),  // Disabled by default
       stateMachine(stateData, controlData) {
           
     // Create log directory and prefix
@@ -238,8 +239,18 @@ bool UAVController::start() {
     visionThread = std::thread(&UAVController::visionThreadFunction, this);
     ekfThread = std::thread(&UAVController::ekfThreadFunction, this);
     controlThread = std::thread(&UAVController::controlThreadFunction, this);
-    displayThread = std::thread(&UAVController::displayThreadFunction, this);
-
+    
+    // Only start display thread if visualization is enabled
+    if (visualizationEnabled) {
+        UAV::logger().Write("DISP", "TimeUS,Status", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "Visualization enabled");
+        displayThread = std::thread(&UAVController::displayThreadFunction, this);
+    } else {
+        UAV::logger().Write("DISP", "TimeUS,Status", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "Visualization disabled (headless mode)");
+    }
     
     return true;
 }
@@ -514,11 +525,19 @@ void UAVController::controlThreadFunction() {
                        cycleCount);
 }
 
-// Display thread function
+// Update the display thread function
 void UAVController::displayThreadFunction() {
     UAV::logger().Write("DTHR", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "Display thread started");
+    
+    // Only proceed with visualization if enabled
+    if (!visualizationEnabled) {
+        UAV::logger().Write("DTHR", "TimeUS,Status", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "Display thread stopped - visualization disabled");
+        return;
+    }
     
     // Create Windows for display
     cv::namedWindow("ArUco Detection", cv::WINDOW_AUTOSIZE);
@@ -646,6 +665,11 @@ void UAVController::displayThreadFunction() {
     UAV::logger().Write("DTHR", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "Display thread stopped");
+}
+
+// Add the setter method
+void UAVController::setVisualization(bool enabled) {
+    visualizationEnabled = enabled;
 }
 
 

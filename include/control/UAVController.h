@@ -62,8 +62,11 @@ public:
      * @return True if running
      */
     bool isRunning() const;
+
+    void setVisualization(bool enabled);
     
 private:
+    bool visualizationEnabled; 
     // Thread synchronization
     std::atomic<bool> running;
     std::mutex controllerMutex;
