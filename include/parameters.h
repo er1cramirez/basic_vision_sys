@@ -15,7 +15,7 @@ namespace UAV_Parameters {
     const int GZ_MAV_PORT = 14550;
 
     // Real UAV parameters
-    const std::string MAV_SER_DEV = "/dev/ttyUSB0";
+    const std::string MAV_SER_DEV = "/dev/ttyAMA0";
     const int SER_BAUD = 57600;
 
 
