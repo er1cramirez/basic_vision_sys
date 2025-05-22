@@ -26,7 +26,7 @@ endif()
 
 
 
-set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/)
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/eric)
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm

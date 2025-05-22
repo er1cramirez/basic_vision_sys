@@ -4,12 +4,14 @@
 
 #include "ImageSourceInterface.h"
 #include <opencv2/opencv.hpp>
+#include <mutex>
 
 /**
  * @class CameraSource
  * @brief Provides frames from a physical camera
  * 
- * Uses OpenCV's VideoCapture to access physical cameras
+ * Uses OpenCV's VideoCapture to access physical cameras with improved
+ * error handling and thread safety
  */
 class CameraSource : public ImageSourceInterface {
 public:
@@ -29,7 +31,6 @@ public:
                 int apiPreference = cv::CAP_V4L2,
                 int fourcc = cv::VideoWriter::fourcc('M', 'J', 'P', 'G'));
 
-    
     /**
      * Destructor
      */
@@ -43,21 +44,62 @@ public:
     int getHeight() const override;
     double getFPS() const override;
     void release() override;
-    // Display all supported camera modes (resolution and FPS)
+    
+    // Camera-specific methods
+    /**
+     * Display all supported camera modes (resolution and FPS)
+     */
     void printCameraModes();
     
-    // Attempt to set the best available mode
+    /**
+     * Attempt to set the best available mode
+     * @param targetWidth Desired width
+     * @param targetHeight Desired height  
+     * @param targetFps Desired FPS
+     * @return true if settings were applied successfully
+     */
     bool setBestMode(int targetWidth, int targetHeight, double targetFps);
     
+    /**
+     * Set camera exposure manually
+     * @param value Exposure value
+     * @return true if successful
+     */
+    bool setExposure(int value);
+    
+    /**
+     * Enable or disable auto exposure
+     * @param enable true to enable auto exposure
+     * @return true if successful
+     */
+    bool setAutoExposure(bool enable);
+    
 private:
-    cv::VideoCapture capture;  // OpenCV camera capture object
-    int cameraId;              // Camera ID/index
-    int width;                 // Desired width
-    int height;                // Desired height
-    double fps;                // Desired FPS
-    int apiPreference;         // OpenCV camera API preference
-    int fourcc;               // FourCC code for video encoding
-    bool initialized;          // Initialization flag
+    cv::VideoCapture capture;    // OpenCV camera capture object
+    mutable std::mutex captureMutex; // Mutex for thread-safe access
+    
+    int cameraId;                // Camera ID/index
+    int width;                   // Current width
+    int height;                  // Current height
+    double fps;                  // Current FPS
+    int apiPreference;           // OpenCV camera API preference
+    int fourcc;                  // FourCC code for video encoding
+    bool initialized;            // Initialization flag
+    
+    /**
+     * Internal method to safely get camera property
+     * @param prop OpenCV property ID
+     * @return property value or -1 if unavailable
+     */
+    double safeGetProperty(int prop) const;
+    
+    /**
+     * Internal method to safely set camera property
+     * @param prop OpenCV property ID
+     * @param value Value to set
+     * @return true if successful
+     */
+    bool safeSetProperty(int prop, double value);
 };
 
 #endif // CAMERA_SOURCE_H
