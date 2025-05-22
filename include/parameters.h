@@ -11,7 +11,7 @@ namespace UAV_Parameters {
 
     // Simulation parameters
     const std::string UDP_IP = "127.0.0.1";
-    const std::string GZ_CAM_TOPIC = "/world/default/model/iris/link/camera_link/sensor/camera/image";
+    const std::string GZ_CAM_TOPIC = "/world/iris_runway_aruco/model/iris_with_fixed_camera/model/camera/link/camera_link/sensor/camera/image";
     const int GZ_MAV_PORT = 14550;
 
     // Real UAV parameters

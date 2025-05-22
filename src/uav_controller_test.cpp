@@ -47,36 +47,11 @@ int main(int argc, char** argv) {
     // Ensure logs directory exists
     ensureLogDirectoryExists();
     
-    // Parse command line arguments
-    bool useGazebo = true;    // Default to Gazebo for testing
-    
-    std::string gazeboTopic = "/world/iris_runway_aruco/model/iris_with_fixed_camera/model/camera/link/camera_link/sensor/camera/image";
-    
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg == "--camera" || arg == "-c") {
-            useGazebo = false;
-        } else if (arg == "--topic" || arg == "-t") {
-            if (i + 1 < argc) {
-                gazeboTopic = argv[i + 1];
-                i++;
-            }
-        } else if (arg == "--help" || arg == "-h") {
-            std::cout << "UAV Control Test\n\n"
-                      << "Options:\n"
-                      << "  -c, --camera       Use physical camera instead of Gazebo\n"
-                      << "  -t, --topic TOPIC  Set Gazebo camera topic\n"
-                      << "  -h, --help         Show this help message\n"
-                      << std::endl;
-            return 0;
-        }
-    }
-    
     // Initialize controller
     UAVController controller;
     
     std::cout << "Initializing UAV controller..." << std::endl;
-    if (!controller.initialize(gazeboTopic, !useGazebo)) {
+    if (!controller.initialize()) {
         std::cerr << "Failed to initialize controller" << std::endl;
         return 1;
     }

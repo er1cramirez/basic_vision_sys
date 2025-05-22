@@ -7,8 +7,10 @@
 #ifdef WITH_GAZEBO
 #include "GazeboSource.h"
 #endif
+#include "parameters.h"
 #include <memory>
 #include <string>
+
 
 /**
  * @class ImageSourceFactory
@@ -88,7 +90,7 @@ public:
      * @return Shared pointer to the created Gazebo source
      */
     static ImageSourcePtr createGazeboSource(
-        const std::string& topicName = "/world/default/model/iris/link/camera_link/sensor/camera/image",
+        const std::string& topicName = UAV_Parameters::GZ_CAM_TOPIC,
         int width = 0,
         int height = 0,
         double fps = 50.0) {

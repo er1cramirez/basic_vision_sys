@@ -33,7 +33,7 @@ UAVController::~UAVController() {
 }
 
 // Initialize the controller
-bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
+bool UAVController::initialize() {
     std::lock_guard<std::mutex> lock(controllerMutex);
     
     if (running) {
@@ -62,15 +62,12 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
                            UAV::logger().getMicroseconds(),
                            "Camera");
     } else {
-        std::string topic = gazeboTopic.empty() ? 
-            "/world/map/model/iris/link/camera_link/sensor/camera/image" : gazeboTopic;
+
+        imageSource = ImageSourceFactory::createGazeboSource();
         
-        imageSource = ImageSourceFactory::createGazeboSource(topic);
-        
-        UAV::logger().Write("SRCE", "TimeUS,Type,Topic", "QZZ",
+        UAV::logger().Write("SRCE", "TimeUS,Type,Topic", "QZ",
                            UAV::logger().getMicroseconds(),
-                           "Gazebo",
-                           topic.c_str());
+                           "Gazebo");
     }
     
     // Initialize image source

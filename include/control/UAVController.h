@@ -39,7 +39,7 @@ public:
      * @param useCamera Use physical camera instead of Gazebo
      * @return True if initialization succeeded
      */
-    bool initialize(const std::string& gazeboTopic = "", bool useCamera = false);
+    bool initialize();
     
     /**
      * @brief Start the controller threads
