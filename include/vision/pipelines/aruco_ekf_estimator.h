@@ -16,14 +16,17 @@ struct EKFStateResult {
     std::chrono::time_point<std::chrono::steady_clock> timestamp;
     
     // State components
-    Eigen::Vector3d position;       // Position in reference frame
-    Eigen::Quaterniond orientation; // Orientation in reference frame
-    Eigen::Vector3d velocity;       // Linear velocity in reference frame
-    Eigen::Vector3d angularVelocity; // Angular velocity in reference frame
+    Eigen::Vector3d position;          // Position in reference frame
+    Eigen::Quaterniond orientation;    // Orientation in reference frame
+    Eigen::Vector3d velocity;          // Linear velocity in reference frame
+    Eigen::Vector3d angularVelocity;   // Angular velocity in reference frame
+    Eigen::Vector3d acceleration;      // Linear acceleration in reference frame
+    Eigen::Vector3d angularAcceleration; // Angular acceleration in reference frame
     
     // Uncertainty metrics
-    Eigen::Vector3d positionStdDev;  // Standard deviation of position estimate
-    Eigen::Vector3d velocityStdDev;  // Standard deviation of velocity estimate
+    Eigen::Vector3d positionStdDev;     // Standard deviation of position estimate
+    Eigen::Vector3d velocityStdDev;     // Standard deviation of velocity estimate
+    Eigen::Vector3d accelerationStdDev; // Standard deviation of acceleration estimate
     
     // Validity flag
     bool valid;
@@ -37,18 +40,20 @@ struct EKFStateResult {
  */
 struct EKFEstimatorConfig {
     // Process noise parameters (variances)
-    double positionProcessNoise;      // Position process noise (m^2)
-    double orientationProcessNoise;   // Orientation process noise (quaternion units^2)
-    double velocityProcessNoise;      // Velocity process noise (m^2/s^2)
-    double angVelProcessNoise;        // Angular velocity process noise (rad^2/s^2)
+    double positionProcessNoise;        // Position process noise (m^2)
+    double orientationProcessNoise;     // Orientation process noise (quaternion units^2)
+    double velocityProcessNoise;        // Velocity process noise (m^2/s^2)
+    double angVelProcessNoise;          // Angular velocity process noise (rad^2/s^2)
+    double accelerationProcessNoise;    // Acceleration process noise (m^2/s^4)
+    double angAccProcessNoise;          // Angular acceleration process noise (rad^2/s^4)
     
     // Measurement noise parameters (variances)
-    double positionMeasurementNoise;  // Position measurement noise (m^2)
+    double positionMeasurementNoise;    // Position measurement noise (m^2)
     double orientationMeasurementNoise; // Orientation measurement noise (quaternion units^2)
     
     // Filter parameters
-    double predictionFrequencyHz;     // Frequency at which to run prediction steps
-    double maxTimeDelta;              // Maximum time delta for prediction (s)
+    double predictionFrequencyHz;       // Frequency at which to run prediction steps
+    double maxTimeDelta;                // Maximum time delta for prediction (s)
     
     // Constructor with default values
     EKFEstimatorConfig();
@@ -137,8 +142,8 @@ public:
     std::chrono::time_point<std::chrono::steady_clock> getLastMeasurementTime() const;
     
 private:
-    // State vector: [x, y, z, qw, qx, qy, qz, vx, vy, vz, wx, wy, wz]
-    // (position, orientation quaternion, linear velocity, angular velocity)
+    // State vector: [x, y, z, qw, qx, qy, qz, vx, vy, vz, wx, wy, wz, ax, ay, az, alpha_x, alpha_y, alpha_z]
+    // (position, orientation quaternion, linear velocity, angular velocity, linear acceleration, angular acceleration)
     Eigen::VectorXd state;
     
     // State covariance matrix

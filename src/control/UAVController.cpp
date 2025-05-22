@@ -21,7 +21,7 @@ UAVController::UAVController()
     std::stringstream ss;
     ss << "uav_control_" << std::put_time(std::localtime(&time_t_now), "%Y%m%d_%H%M%S");
     logPrefix = ss.str();
-    logDirectory = "/home/eric/simLogs";
+    logDirectory = "simLogs";
 }
 
 // Destructor
@@ -55,7 +55,7 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
                        "UAV Controller 1.0");
     
     // Create image source
-    if (useCamera) {
+    if (!UAV_Parameters::IS_SIMULATOR) {
         imageSource = ImageSourceFactory::createCameraSource();
         
         UAV::logger().Write("SRCE", "TimeUS,Type", "QZ",
@@ -125,6 +125,27 @@ bool UAVController::initialize(const std::string& gazeboTopic, bool useCamera) {
                                e.what());
             return false;
         }
+    } else {
+        // Initialize serial MAVLink module
+        try {
+            mavlinkModule = std::make_unique<MavlinkCommModule>(
+                UAV_Parameters::MAV_SER_DEV, UAV_Parameters::SER_BAUD,
+                UAV_Parameters::SYS_ID, UAV_Parameters::COMP_ID,
+                UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP);
+            
+            // Set the frequency to match control thread (100Hz)
+            mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
+            
+            UAV::logger().Write("MAVL", "TimeUS,Device,BaudRate", "QZIZ",
+                               UAV::logger().getMicroseconds(),
+                               UAV_Parameters::MAV_SER_DEV.c_str(),
+                               UAV_Parameters::SER_BAUD);
+        } catch (const std::exception& e) {
+            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
+                               UAV::logger().getMicroseconds(),
+                               e.what());
+            return false;
+        }
     }
     
     return true;
@@ -135,7 +156,7 @@ void UAVController::setupArucoPipeline() {
     // Create and configure the ArUco pipeline
     ArucoPoseSettings settings;
     settings.dictionaryId = cv::aruco::DICT_5X5_1000;
-    settings.markerSizeMeters = 0.5;  // 50cm marker
+    settings.markerSizeMeters = UAV_Parameters::ARUCO_MARKER_SIZE;  // 50cm marker
     settings.useCornerRefinement = true;
     settings.cornerRefinementMaxIterations = 30;
     settings.cornerRefinementMinAccuracy = 0.01;
@@ -147,13 +168,14 @@ void UAVController::setupArucoPipeline() {
     
     // Camera calibration data from gazebo for 640x480
     CameraCalibration calibration;
-    calibration.cameraMatrix = (cv::Mat_<double>(3, 3) << 
-        205.46962738037109, 0.0, 320.0,
-        0.0, 205.46965599060059, 240.0,
-        0.0, 0.0, 1.0);
-    calibration.distCoeffs = (cv::Mat_<double>(1, 5) << 0.0, 0.0, 0.0, 0.0, 0.0);
-    calibration.cameraMatrix.convertTo(calibration.cameraMatrix, CV_64F);
-    calibration.distCoeffs.convertTo(calibration.distCoeffs, CV_64F);
+    if (UAV_Parameters::IS_SIMULATOR) {
+        calibration.cameraMatrix = UAV_Parameters::CAM_MAT_SIM;
+        calibration.distCoeffs = UAV_Parameters::DIST_COEF_SIM;
+    } else {
+        calibration.cameraMatrix = UAV_Parameters::CAM_MAT_REAl;
+        calibration.distCoeffs = UAV_Parameters::DIST_COEF_REAL;
+    }
+    // Set camera calibration
     arucoProcessor.setCalibration(calibration);
     
     // Log ArUco configuration
@@ -168,22 +190,22 @@ void UAVController::setupArucoPipeline() {
 // Configure EKF estimator
 void UAVController::setupEKFEstimator() {
     // Create and configure EKF estimator
-    EKFEstimatorConfig ekfConfig;
-    ekfConfig.predictionFrequencyHz = 100.0;  // 100 Hz prediction rate
-    ekfConfig.positionProcessNoise = 0.01;    // Position process noise
-    ekfConfig.velocityProcessNoise = 0.01;     // Velocity process noise
-    ekfConfig.positionMeasurementNoise = 0.01; // Position measurement noise
+    // EKFEstimatorConfig ekfConfig;
+    // ekfConfig.predictionFrequencyHz = 100.0;  // 100 Hz prediction rate
+    // ekfConfig.positionProcessNoise = 0.01;    // Position process noise
+    // ekfConfig.velocityProcessNoise = 0.01;     // Velocity process noise
+    // ekfConfig.positionMeasurementNoise = 0.01; // Position measurement noise
     
-    // Update EKF with configuration
-    ekfEstimator.updateConfig(ekfConfig);
+    // // Update EKF with configuration
+    // ekfEstimator.updateConfig(ekfConfig);
     
-    // Log EKF configuration
-    UAV::logger().Write("EKFC", "TimeUS,PredFreq,PosNoise,VelNoise,MeasNoise", "Qffff",
-                       UAV::logger().getMicroseconds(),
-                       static_cast<float>(ekfConfig.predictionFrequencyHz),
-                       static_cast<float>(ekfConfig.positionProcessNoise),
-                       static_cast<float>(ekfConfig.velocityProcessNoise),
-                       static_cast<float>(ekfConfig.positionMeasurementNoise));
+    // // Log EKF configuration
+    // UAV::logger().Write("EKFC", "TimeUS,PredFreq,PosNoise,VelNoise,MeasNoise", "Qffff",
+    //                    UAV::logger().getMicroseconds(),
+    //                    static_cast<float>(ekfConfig.predictionFrequencyHz),
+    //                    static_cast<float>(ekfConfig.positionProcessNoise),
+    //                    static_cast<float>(ekfConfig.velocityProcessNoise),
+    //                    static_cast<float>(ekfConfig.positionMeasurementNoise));
 }
 
 // Start the controller threads

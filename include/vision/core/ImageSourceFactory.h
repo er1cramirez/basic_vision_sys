@@ -63,10 +63,10 @@ public:
      */
     static ImageSourcePtr createCameraSource(
         int cameraId = 0,
-        int width = 640,
-        int height = 480,
-        double fps = 30.0,
-        int apiPreference = cv::CAP_ANY) {
+        int width = 1280,
+        int height = 720,
+        double fps = 50.0,
+        int apiPreference = cv::CAP_V4L2) {
         
         return std::make_shared<CameraSource>(cameraId, width, height, fps, apiPreference);
     }
