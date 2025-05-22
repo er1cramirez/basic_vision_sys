@@ -2,15 +2,17 @@ cmake_minimum_required(VERSION 3.10)
 project(VisionSystem VERSION 1.0)
 
 # Set C++ standard
-set(CMAKE_CXX_STANDARD 17)  # C++17 required for std::optional
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Find required packages
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 # Option to enable/disable Gazebo support
-option(WITH_GAZEBO "Build with Gazebo support" OFF)
+option(WITH_GAZEBO "Build with Gazebo support" ON)
 
 # Define a preprocessor macro to indicate Gazebo availability
 if(WITH_GAZEBO)
@@ -24,14 +26,9 @@ if(WITH_GAZEBO)
     add_definitions(-DWITH_GAZEBO)
 endif()
 
-
-
+# MAVLink setup
 set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/eric)
-# Include directories
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
-    ${MAVLINK_INCLUDE_DIR}
-)
+include_directories(${MAVLINK_INCLUDE_DIR})
 add_compile_options(-Wno-address-of-packed-member)
 
 # Include directories
@@ -43,9 +40,11 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/control
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/visualization  # Add visualization include
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
 )
+
 # Add Gazebo include directories only if enabled
 if(WITH_GAZEBO)
     include_directories(
@@ -55,19 +54,19 @@ if(WITH_GAZEBO)
 endif()
 
 # Define source file groups
-
 set(MAV_COM_SOURCES
     src/mavcomm/mavlink_comm_module.cpp
     src/mavcomm/serial_port.cpp
     src/mavcomm/udp_port.cpp
 )
+
 set(VISION_CORE_SOURCES
     src/vision/core/CameraSource.cpp
 )
+
 # Add Gazebo sources only if enabled
 if(WITH_GAZEBO)
     list(APPEND VISION_CORE_SOURCES src/vision/core/GazeboSource.cpp)
-    # list(APPEND VISION_CORE_HEADERS include/vision/core/GazeboSource.h)
 endif()
 
 # Add Logger source file
@@ -85,65 +84,30 @@ set(CONTROL_SOURCES
     src/control/UAVController.cpp
 )
 
-set(MAIN_SOURCES
-    src/main.cpp
+# Add visualization sources
+set(VISUALIZATION_SOURCES
+    src/visualization/GenericDebugVisualizer.cpp
 )
-
-set(TEST_SOURCES
-    src/aruco_pose_test.cpp
-)
-
-set(CONTROLLER_TEST_SOURCES
-    src/uav_controller_test.cpp
-)
-
-# Create main executable
-# add_executable(vision_system 
-#     ${MAIN_SOURCES} 
-#     ${CORE_SOURCES}
-# )
-
-# # Link libraries for main executable
-# target_link_libraries(vision_system
-#     ${OpenCV_LIBS}
-#     ${gz-transport13_LIBRARIES}
-#     ${gz-msgs10_LIBRARIES}
-#     pthread
-# )
-
-# # Create ArUco test executable
-# add_executable(aruco_pose_test 
-#     ${TEST_SOURCES}
-#     ${PIPELINE_SOURCES}
-#     ${CORE_SOURCES}
-#     ${LOGGER_SOURCES}
-# )
-
-# # Link libraries for ArUco test
-# target_link_libraries(aruco_pose_test
-#     ${OpenCV_LIBS}
-#     ${gz-transport13_LIBRARIES}
-#     ${gz-msgs10_LIBRARIES}
-#     pthread
-#     Eigen3::Eigen
-# )
 
 # Create UAV Controller test executable
 add_executable(uav_controller_test 
-    ${CONTROLLER_TEST_SOURCES}
+    src/uav_controller_test.cpp
     ${PIPELINE_SOURCES}
     ${VISION_CORE_SOURCES}
     ${LOGGER_SOURCES}
     ${CONTROL_SOURCES}
     ${MAV_COM_SOURCES}
+    ${VISUALIZATION_SOURCES}  # Add visualization sources
 )
 
 # Link libraries for UAV Controller test
 target_link_libraries(uav_controller_test
     ${OpenCV_LIBS}
-    pthread
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${OPENSSL_LIBRARIES}  # Required for httplib HTTPS support
     Eigen3::Eigen
 )
+
 # Link Gazebo libraries only if enabled
 if(WITH_GAZEBO)
     target_link_libraries(uav_controller_test
@@ -184,3 +148,12 @@ endif()
 
 # Create logs directory if it doesn't exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
+
+# Print configuration summary
+message(STATUS "=== Build Configuration ===")
+message(STATUS "OpenCV version: ${OpenCV_VERSION}")
+message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "Gazebo support: ${WITH_GAZEBO}")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "===========================")

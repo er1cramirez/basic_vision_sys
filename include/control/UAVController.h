@@ -6,8 +6,9 @@
 #include "aruco_pose_pipeline.h"
 #include "aruco_ekf_estimator.h"
 #include "Logger.h"
-#include "ImageSourceInterface.h" // Use your existing interface
+#include "ImageSourceInterface.h"
 #include "mavlink_comm_module.h"
+#include "GenericDebugVisualizer.h"  // No dependencies!
 
 #include <thread>
 #include <atomic>
@@ -19,7 +20,8 @@
  * @class UAVController
  * @brief Main controller class for the UAV system
  * 
- * This class manages the different threads and components of the UAV system
+ * This class manages the different threads and components of the UAV system.
+ * Now supports both headless operation and remote HTTP-based visualization.
  */
 class UAVController {
 public:
@@ -35,8 +37,6 @@ public:
     
     /**
      * @brief Initialize the controller
-     * @param gazeboTopic Optional topic for Gazebo camera
-     * @param useCamera Use physical camera instead of Gazebo
      * @return True if initialization succeeded
      */
     bool initialize();
@@ -63,10 +63,25 @@ public:
      */
     bool isRunning() const;
 
-    void setVisualization(bool enabled);
+    /**
+     * @brief Enable/disable remote HTTP visualization
+     * @param enabled True to enable HTTP server visualization
+     * @param port HTTP server port (default 8888)
+     */
+    void setHttpVisualization(bool enabled, int port = 8888);
     
+    /**
+     * @brief Get the HTTP visualization port
+     * @return Port number if HTTP visualization is enabled, 0 otherwise
+     */
+    int getVisualizationPort() const;
+
 private:
-    bool visualizationEnabled; 
+    // Visualization control
+    bool httpVisualizationEnabled;
+    int httpVisualizationPort;
+    std::unique_ptr<GenericDebugVisualizer> debugVisualizer;
+    
     // Thread synchronization
     std::atomic<bool> running;
     std::mutex controllerMutex;
@@ -75,7 +90,7 @@ private:
     std::thread visionThread;
     std::thread ekfThread;
     std::thread controlThread;
-    std::thread displayThread;
+    // Note: displayThread removed - replaced with HTTP server
     
     // Thread data exchange
     LatestData<ArucoPoseResult> arucoData;
@@ -84,7 +99,7 @@ private:
     
     // System components
     std::unique_ptr<MavlinkCommModule> mavlinkModule;
-    ImageSourcePtr imageSource;  // Use your existing ImageSourcePtr
+    ImageSourcePtr imageSource;
     ArucoPosePipeline arucoProcessor;
     ArucoEKFEstimator ekfEstimator;
     UAVStateMachine stateMachine;
@@ -97,11 +112,13 @@ private:
     void visionThreadFunction();
     void ekfThreadFunction();
     void controlThreadFunction();
-    void displayThreadFunction();
     
     // Helper functions
     void setupArucoPipeline();
     void setupEKFEstimator();
+    
+    // Visualization helpers
+    void updateVisualization();
 };
 
 #endif // UAV_CONTROLLER_H
