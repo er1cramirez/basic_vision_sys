@@ -36,11 +36,8 @@ namespace UAV_Parameters {
     const cv::Mat DIST_COEF_SIM = (cv::Mat_<double>(1, 5, CV_64F) << 0.0, 0.0, 0.0, 0.0, 0.0);
 
 
-    const cv::Mat CAM_MAT_REAl = (cv::Mat_<double>(3, 3, CV_64F) << 
-        205.46962738037109, 0.0, 320.0,
-        0.0, 205.46965599060059, 240.0,
-        0.0, 0.0, 1.0);
-    const cv::Mat DIST_COEF_REAL = (cv::Mat_<double>(1, 5, CV_64F) << 0.0, 0.0, 0.0, 0.0, 0.0);
+    const cv::Mat CAM_MAT_REAl = (cv::Mat_<double>(3, 3, CV_64F) << 1050.7198338831963, 0.0, 590.6145230024807, 0.0, 1052.4214750817584, 357.32629428280933, 0.0, 0.0, 1.0);
+    const cv::Mat DIST_COEF_REAL = (cv::Mat_<double>(1, 5, CV_64F) << -0.4156718861966027, 0.24096889240291883, -0.0017047304726053338, 0.0023328696013949395, -0.108061471179946834);
 
 
     // PD position control parameters
