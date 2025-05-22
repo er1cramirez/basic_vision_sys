@@ -1,5 +1,4 @@
 #include "CameraSource.h"
-#include "GazeboSource.h"
 #include <iostream>
 
 CameraSource::CameraSource(int cameraId, int width, int height, double fps, int apiPreference, int fourcc)

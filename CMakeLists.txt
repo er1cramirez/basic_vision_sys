@@ -9,12 +9,22 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenCV REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-# Setup environment for Gazebo Harmonic
-set(ENV{GZ_VERSION} "harmonic")
+# Option to enable/disable Gazebo support
+option(WITH_GAZEBO "Build with Gazebo support" OFF)
 
-# Find Gazebo Harmonic packages
-find_package(gz-transport13 REQUIRED)
-find_package(gz-msgs10 REQUIRED)
+# Define a preprocessor macro to indicate Gazebo availability
+if(WITH_GAZEBO)
+    # Setup environment for Gazebo Harmonic
+    set(ENV{GZ_VERSION} "harmonic")
+    
+    # Find Gazebo Harmonic packages
+    find_package(gz-transport13 REQUIRED)
+    find_package(gz-msgs10 REQUIRED)
+    
+    add_definitions(-DWITH_GAZEBO)
+endif()
+
+
 
 set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/)
 # Include directories
@@ -35,9 +45,14 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
-    ${gz-transport13_INCLUDE_DIRS}
-    ${gz-msgs10_INCLUDE_DIRS}
 )
+# Add Gazebo include directories only if enabled
+if(WITH_GAZEBO)
+    include_directories(
+        ${gz-transport13_INCLUDE_DIRS}
+        ${gz-msgs10_INCLUDE_DIRS}
+    )
+endif()
 
 # Define source file groups
 
@@ -46,10 +61,14 @@ set(MAV_COM_SOURCES
     src/mavcomm/serial_port.cpp
     src/mavcomm/udp_port.cpp
 )
-set(CORE_SOURCES
+set(VISION_CORE_SOURCES
     src/vision/core/CameraSource.cpp
-    src/vision/core/GazeboSource.cpp
 )
+# Add Gazebo sources only if enabled
+if(WITH_GAZEBO)
+    list(APPEND VISION_CORE_SOURCES src/vision/core/GazeboSource.cpp)
+    # list(APPEND VISION_CORE_HEADERS include/vision/core/GazeboSource.h)
+endif()
 
 # Add Logger source file
 set(LOGGER_SOURCES
@@ -113,7 +132,7 @@ set(CONTROLLER_TEST_SOURCES
 add_executable(uav_controller_test 
     ${CONTROLLER_TEST_SOURCES}
     ${PIPELINE_SOURCES}
-    ${CORE_SOURCES}
+    ${VISION_CORE_SOURCES}
     ${LOGGER_SOURCES}
     ${CONTROL_SOURCES}
     ${MAV_COM_SOURCES}
@@ -122,11 +141,16 @@ add_executable(uav_controller_test
 # Link libraries for UAV Controller test
 target_link_libraries(uav_controller_test
     ${OpenCV_LIBS}
-    ${gz-transport13_LIBRARIES}
-    ${gz-msgs10_LIBRARIES}
     pthread
     Eigen3::Eigen
 )
+# Link Gazebo libraries only if enabled
+if(WITH_GAZEBO)
+    target_link_libraries(uav_controller_test
+        ${gz-transport13_LIBRARIES}
+        ${gz-msgs10_LIBRARIES}
+    )
+endif()
 
 # Add build-specific compiler optimizations for release builds
 if(CMAKE_BUILD_TYPE MATCHES "Release")

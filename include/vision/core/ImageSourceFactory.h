@@ -4,7 +4,9 @@
 
 #include "ImageSourceInterface.h"
 #include "CameraSource.h"
+#ifdef WITH_GAZEBO
 #include "GazeboSource.h"
+#endif
 #include <memory>
 #include <string>
 
@@ -42,9 +44,14 @@ public:
                 return std::make_shared<CameraSource>(0, width, height, fps);
                 
             case SourceType::GAZEBO:
+                #ifdef WITH_GAZEBO
                 return std::make_shared<GazeboSource>(
                     "/world/default/model/iris/link/camera_link/sensor/camera/image",
                     width, height, fps);
+                #else
+                std::cerr << "Error: Gazebo support not compiled in this build" << std::endl;
+                return nullptr;
+                #endif
                 
             default:
                 return nullptr;
@@ -86,7 +93,12 @@ public:
         int height = 0,
         double fps = 50.0) {
         
+        #ifdef WITH_GAZEBO
         return std::make_shared<GazeboSource>(topicName, width, height, fps);
+        #else
+        std::cerr << "Error: Gazebo support not compiled in this build" << std::endl;
+        return nullptr;
+        #endif
     }
 };
 
