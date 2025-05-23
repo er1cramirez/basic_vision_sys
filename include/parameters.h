@@ -7,7 +7,7 @@
 
 namespace UAV_Parameters {
     // Default values
-    const bool IS_SIMULATOR = false;
+    const bool IS_SIMULATOR = true;
 
     // Simulation parameters
     const std::string UDP_IP = "127.0.0.1";
