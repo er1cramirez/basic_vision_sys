@@ -400,6 +400,10 @@ void UAVController::visionThreadFunction() {
                     fpsFrameCount = 0;
                     fpsStartTime = std::chrono::steady_clock::now();
                 }
+                // print FPS every 30 frames
+                if (frameCount % 30 == 0) {
+                    std::cout << "FPS: " << currentFps << std::endl;
+                }
                 
                 // Log frame processing
                 UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
