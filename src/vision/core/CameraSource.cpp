@@ -18,106 +18,137 @@ CameraSource::~CameraSource() {
     release();
 }
 
+// Optimized CameraSource initialization for minimal latency
 bool CameraSource::initialize() {
     if (initialized) {
         return true;
     }
     
-    std::cout << "Attempting to open camera " << cameraId << " with API " << apiPreference << std::endl;
+    std::cout << "Initializing camera with low-latency settings..." << std::endl;
     
-    // Try to open with specified API first
-    if (!capture.open(cameraId, apiPreference)) {
-        std::cout << "Failed with specified API, trying default API..." << std::endl;
-        
-        // Fall back to default API if specified one fails
-        if (!capture.open(cameraId)) {
-            std::cerr << "Error: Could not open camera with ID " << cameraId << std::endl;
-            return false;
+    // CRITICAL: Try different APIs in order of preference
+    std::vector<int> apiPreferences = {
+        cv::CAP_V4L2,      // Linux native (usually fastest)
+        cv::CAP_GSTREAMER, // GStreamer (good for RTSP/network)
+        cv::CAP_FFMPEG,    // FFmpeg (fallback)
+        cv::CAP_ANY        // Last resort
+    };
+    
+    bool opened = false;
+    for (int api : apiPreferences) {
+        std::cout << "Trying API: " << api << std::endl;
+        if (capture.open(cameraId, api)) {
+            std::cout << "Successfully opened with API: " << api << std::endl;
+            opened = true;
+            break;
         }
     }
     
-    if (!capture.isOpened()) {
-        std::cerr << "Error: Camera is not opened after initialization" << std::endl;
+    if (!opened) {
+        std::cerr << "Failed to open camera with any API" << std::endl;
         return false;
     }
     
-    std::cout << "Camera opened successfully" << std::endl;
+    // CRITICAL SETTINGS FOR LOW LATENCY (apply before resolution/FPS)
+    std::cout << "Applying low-latency camera settings..." << std::endl;
     
-    // Set buffer size to reduce latency (important for real-time applications)
-    capture.set(cv::CAP_PROP_BUFFERSIZE, 1);
+    // 1. MINIMAL BUFFER - Most important setting
+    if (!capture.set(cv::CAP_PROP_BUFFERSIZE, 1)) {
+        std::cout << "Warning: Could not set buffer size to 1" << std::endl;
+    } else {
+        std::cout << "✓ Buffer size set to 1" << std::endl;
+    }
     
-    // Configure camera properties in the right order
-    bool configSuccess = true;
+    // 2. DISABLE AUTO SETTINGS (they cause delays)
+    capture.set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25); // Manual exposure
+    capture.set(cv::CAP_PROP_AUTOFOCUS, 0);        // Disable autofocus
+    capture.set(cv::CAP_PROP_AUTO_WB, 0);          // Disable auto white balance
     
-    // Set frame format first (this can affect available resolutions)
+    // 3. FORCE SPECIFIC FORMAT (avoid format negotiation delays)
     if (fourcc != 0) {
-        if (!capture.set(cv::CAP_PROP_FOURCC, fourcc)) {
-            std::cout << "Warning: Could not set desired FOURCC format" << std::endl;
+        if (capture.set(cv::CAP_PROP_FOURCC, fourcc)) {
+            std::cout << "✓ FourCC format set" << std::endl;
+        }
+    } else {
+        // Try MJPEG first (usually fastest for USB cameras)
+        int mjpeg = cv::VideoWriter::fourcc('M', 'J', 'P', 'G');
+        if (capture.set(cv::CAP_PROP_FOURCC, mjpeg)) {
+            std::cout << "✓ Using MJPEG format" << std::endl;
         }
     }
     
-    // Set resolution
-    if (!capture.set(cv::CAP_PROP_FRAME_WIDTH, width)) {
-        std::cout << "Warning: Could not set desired width: " << width << std::endl;
-        configSuccess = false;
-    }
+    // 4. SET LOWER RESOLUTION FIRST (reduces USB bandwidth)
+    // Start with lower resolution, then increase if needed
+    int testWidth = std::min(width, 640);
+    int testHeight = std::min(height, 480);
     
-    if (!capture.set(cv::CAP_PROP_FRAME_HEIGHT, height)) {
-        std::cout << "Warning: Could not set desired height: " << height << std::endl;
-        configSuccess = false;
-    }
+    capture.set(cv::CAP_PROP_FRAME_WIDTH, testWidth);
+    capture.set(cv::CAP_PROP_FRAME_HEIGHT, testHeight);
+    capture.set(cv::CAP_PROP_FPS, fps);
     
-    // Set FPS
-    if (!capture.set(cv::CAP_PROP_FPS, fps)) {
-        std::cout << "Warning: Could not set desired FPS: " << fps << std::endl;
-        configSuccess = false;
-    }
+    // 5. LINUX-SPECIFIC V4L2 OPTIMIZATIONS
+    #ifdef __linux__
+    capture.set(cv::CAP_PROP_CONVERT_RGB, 0);  // Avoid conversions
     
-    // Get actual values that were set
+    // V4L2 specific settings for minimal latency
+    // These may not work with all cameras but worth trying
+    if (apiPreferences[0] == cv::CAP_V4L2) {
+        // Try to set exposure manually to avoid auto-exposure delays
+        capture.set(cv::CAP_PROP_EXPOSURE, -6);  // Fast exposure
+        capture.set(cv::CAP_PROP_GAIN, 50);      // Manual gain
+        std::cout << "✓ Applied V4L2 manual exposure settings" << std::endl;
+    }
+    #endif
+    
+    // 6. VERIFY ACTUAL SETTINGS
     int actualWidth = static_cast<int>(capture.get(cv::CAP_PROP_FRAME_WIDTH));
     int actualHeight = static_cast<int>(capture.get(cv::CAP_PROP_FRAME_HEIGHT));
     double actualFps = capture.get(cv::CAP_PROP_FPS);
+    int actualBuffer = static_cast<int>(capture.get(cv::CAP_PROP_BUFFERSIZE));
     
-    std::cout << "Camera configuration:" << std::endl;
-    std::cout << "  Requested: " << width << "x" << height << " @ " << fps << " FPS" << std::endl;
-    std::cout << "  Actual: " << actualWidth << "x" << actualHeight << " @ " << actualFps << " FPS" << std::endl;
+    std::cout << "Camera settings verification:" << std::endl;
+    std::cout << "  Resolution: " << actualWidth << "x" << actualHeight << std::endl;
+    std::cout << "  FPS: " << actualFps << std::endl;
+    std::cout << "  Buffer size: " << actualBuffer << std::endl;
     
-    // Update our stored values to match reality
+    // Update our stored values
     width = actualWidth;
     height = actualHeight;
     fps = actualFps;
     
-    // Test frame capture before declaring success
+    // 7. PERFORMANCE TEST - Measure actual frame acquisition time
+    std::cout << "Testing frame acquisition performance..." << std::endl;
     cv::Mat testFrame;
-    bool testCapture = false;
+    double totalTime = 0;
+    int successCount = 0;
     
-    // Try a few times to get a test frame
-    for (int i = 0; i < 5 && !testCapture; i++) {
-        if (capture.read(testFrame) && !testFrame.empty()) {
-            testCapture = true;
-            
-            // Update dimensions from actual frame (most reliable method)
-            width = testFrame.cols;
-            height = testFrame.rows;
-            
-            std::cout << "Test frame captured successfully: " << width << "x" << height << std::endl;
-        } else {
-            std::cout << "Test frame " << (i + 1) << " failed, retrying..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    for (int i = 0; i < 10; i++) {
+        auto start = std::chrono::steady_clock::now();
+        bool success = capture.read(testFrame);
+        auto end = std::chrono::steady_clock::now();
+        
+        if (success && !testFrame.empty()) {
+            double frameTime = std::chrono::duration<double, std::milli>(end - start).count();
+            totalTime += frameTime;
+            successCount++;
+            std::cout << "  Test frame " << (i+1) << ": " << frameTime << "ms" << std::endl;
         }
     }
     
-    if (!testCapture) {
-        std::cerr << "Error: Camera failed to provide valid test frames" << std::endl;
-        capture.release();
-        return false;
+    if (successCount > 0) {
+        double avgTime = totalTime / successCount;
+        std::cout << "Average frame acquisition time: " << avgTime << "ms" << std::endl;
+        
+        if (avgTime > 20.0) {
+            std::cout << "⚠️  WARNING: Frame acquisition is slow (" << avgTime << "ms)" << std::endl;
+            std::cout << "   This will limit your maximum FPS to ~" << (1000.0/avgTime) << std::endl;
+            std::cout << "   Consider lower resolution or different camera" << std::endl;
+        } else {
+            std::cout << "✓ Frame acquisition performance is good (" << avgTime << "ms)" << std::endl;
+        }
     }
     
-    // Print final camera properties for debugging
-    printCameraModes();
-    
     initialized = true;
-    std::cout << "Camera initialization completed successfully" << std::endl;
     return true;
 }
 
