@@ -410,12 +410,12 @@ void UAVController::visionThreadFunction() {
                     std::cout << "Processing time: " << result.processingTimeMs << "ms" << std::endl;
                 }
                 
-                // Log frame processing
-                UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
-                                   UAV::logger().getMicroseconds(),
-                                   frameCount,
-                                   result.processingTimeMs,
-                                   result.fps);
+                // // Log frame processing
+                // UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
+                //                    UAV::logger().getMicroseconds(),
+                //                    frameCount,
+                //                    result.processingTimeMs,
+                //                    result.fps);
             }
         }
         
@@ -439,11 +439,7 @@ void UAVController::visionThreadFunction() {
 }
 
 // New visualization thread function
-void UAVController::visualizationThreadFunction() {
-    UAV::logger().Write("VIZT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Visualization thread started");
-    
+void UAVController::visualizationThreadFunction() {    
     const auto updatePeriod = std::chrono::milliseconds(1000 / visualizationUpdateRateHz);
     auto nextUpdateTime = std::chrono::steady_clock::now();
     
