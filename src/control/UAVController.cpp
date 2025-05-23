@@ -336,16 +336,32 @@ int UAVController::getVisualizationPort() const {
 }
 
 // Vision thread function
+// Optimized vision thread function for UAVController.cpp
 void UAVController::visionThreadFunction() {
     UAV::logger().Write("VTHR", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "Vision thread started");
     
+    // Configure camera for optimal performance if it's a CameraSource
+    auto cameraSource = std::dynamic_pointer_cast<CameraSource>(imageSource);
+    if (cameraSource) {
+        // Disable frame copying for maximum performance
+        cameraSource->setShouldCopyFrame(false);
+        
+        // If you only need grayscale for ArUco, enable preprocessing
+        // cameraSource->setPreprocessType(FramePreprocessType::GRAYSCALE);
+        
+        UAV::logger().Write("VCFG", "TimeUS,OptimizationsEnabled", "QZ",
+                           UAV::logger().getMicroseconds(),
+                           "Zero-copy frame acquisition");
+    }
+    
     Eigen::Matrix4d droneTransform;
-        droneTransform << 0, -1, 0, 0,
-                        1, 0, 0, 0,
-                        0, 0, 1, 0,
-                        0, 0, 0, 1;
+    droneTransform << 0, -1, 0, 0,
+                      1, 0, 0, 0,
+                      0, 0, 1, 0,
+                      0, 0, 0, 1;
+    
     // Performance tracking
     auto fpsStartTime = std::chrono::steady_clock::now();
     int fpsFrameCount = 0;
@@ -355,16 +371,21 @@ void UAVController::visionThreadFunction() {
     ArucoInputFrame inputFrame;
     int frameCount = 0;
     
+    // Pre-allocate visualization data to avoid repeated allocations
+    VisualizationData vizUpdate;
+    
     while (running) {
         auto startTime = std::chrono::steady_clock::now();
         
         if (imageSource->getNextFrame(frame)) {
             if (!frame.empty()) {
-                // Process frame with ArUco pipeline
-                inputFrame.image = frame.clone();
+                // CRITICAL OPTIMIZATION: Avoid frame.clone() here!
+                // Instead, let ArUco processor handle the frame directly
+                inputFrame.image = frame;  // Shallow copy (just reference)
                 inputFrame.sequenceId = frameCount++;
                 inputFrame.timestamp = std::chrono::steady_clock::now();
                 
+                // Process frame with ArUco pipeline
                 ArucoPoseResult result = arucoProcessor.process(inputFrame);
                 
                 // Apply drone reference frame transformation
@@ -373,10 +394,10 @@ void UAVController::visionThreadFunction() {
                 // Share result with other threads
                 arucoData.update(result);
                 
-                // Update visualization data (FAST - no frame cloning here!)
-                if (httpVisualizationEnabled) {
-                    VisualizationData vizUpdate;
-                    vizUpdate.debugImage = result.debugImage;  // Direct assignment, no clone
+                // Update visualization data only if enabled
+                if (httpVisualizationEnabled && !result.debugImage.empty()) {
+                    // Reuse the vizUpdate object to avoid allocations
+                    vizUpdate.debugImage = result.debugImage;  // Direct assignment
                     vizUpdate.frameId = frameCount;
                     vizUpdate.visionFps = currentFps;
                     vizUpdate.timestamp = std::chrono::steady_clock::now();
@@ -399,25 +420,31 @@ void UAVController::visionThreadFunction() {
                     currentFps = fpsFrameCount / std::chrono::duration<double>(fpsElapsed).count();
                     fpsFrameCount = 0;
                     fpsStartTime = std::chrono::steady_clock::now();
+                    
+                    // Log performance metrics
+                    // UAV::logger().Write("VPERF", "TimeUS,FPS,FrameAcqMs,ProcessMs", "Qfff",
+                    //                    UAV::logger().getMicroseconds(),
+                    //                    static_cast<float>(currentFps),
+                    //                    static_cast<float>(result.frameAcquisitionTimeMs),
+                    //                    static_cast<float>(result.processingTimeMs));
                 }
-                
-                // Log frame processing
-                UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
-                                   UAV::logger().getMicroseconds(),
-                                   frameCount,
-                                   result.processingTimeMs,
-                                   result.fps);
             }
         }
         
-        // Maintain target frame rate
-        auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(20); // ~50 Hz
+        // Remove sleep - let the camera's frame rate control the loop timing
+        // The getNextFrame() call will naturally pace the loop
         
-        if (elapsed < targetFrameTime) {
-            std::this_thread::sleep_for(targetFrameTime - elapsed);
+        // Only add a small sleep if we're running way too fast (unlikely with camera)
+        auto elapsed = std::chrono::steady_clock::now() - startTime;
+        if (elapsed < std::chrono::milliseconds(2)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
+    
+    UAV::logger().Write("VTHR", "TimeUS,Status,TotalFrames", "QZI",
+                       UAV::logger().getMicroseconds(),
+                       "Vision thread stopped",
+                       frameCount);
 }
 
 // New visualization thread function

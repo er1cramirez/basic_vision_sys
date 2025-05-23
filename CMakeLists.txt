@@ -100,6 +100,8 @@ add_executable(uav_controller_test
     ${VISUALIZATION_SOURCES}  # Add visualization sources
 )
 
+
+
 # Link libraries for UAV Controller test
 target_link_libraries(uav_controller_test
     ${OpenCV_LIBS}
@@ -115,6 +117,15 @@ if(WITH_GAZEBO)
         ${gz-msgs10_LIBRARIES}
     )
 endif()
+
+add_executable(camera_src_test
+    src/test_camera_performance.cpp
+    ${VISION_CORE_SOURCES}
+)
+
+target_link_libraries(camera_src_test
+    ${OpenCV_LIBS}
+)
 
 # Add build-specific compiler optimizations for release builds
 if(CMAKE_BUILD_TYPE MATCHES "Release")

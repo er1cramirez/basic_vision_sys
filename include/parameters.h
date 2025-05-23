@@ -7,7 +7,7 @@
 
 namespace UAV_Parameters {
     // Default values
-    const bool IS_SIMULATOR = true;
+    const bool IS_SIMULATOR = false;
 
     // Simulation parameters
     const std::string UDP_IP = "127.0.0.1";
@@ -27,7 +27,7 @@ namespace UAV_Parameters {
     const uint8_t TG_COMP = 0;
 
     // Aruco parameters
-    const double ARUCO_MARKER_SIZE = 0.5; // Marker size in meters (simulator = 50cm, real = 27cm)    
+    const double ARUCO_MARKER_SIZE = 0.093; // Marker size in meters (simulator = 50cm, real = 27cm)    
 
     const cv::Mat CAM_MAT_SIM = (cv::Mat_<double>(3, 3, CV_64F) << 
         205.46962738037109, 0.0, 320.0,
