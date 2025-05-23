@@ -144,12 +144,12 @@ bool UAVController::initialize() {
         }
     } else {
         try {
-            // mavlinkModule = std::make_unique<MavlinkCommModule>(
-            //     UAV_Parameters::MAV_SER_DEV, UAV_Parameters::SER_BAUD,
-            //     UAV_Parameters::SYS_ID, UAV_Parameters::COMP_ID,
-            //     UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP, true);
+            mavlinkModule = std::make_unique<MavlinkCommModule>(
+                UAV_Parameters::MAV_SER_DEV, UAV_Parameters::SER_BAUD,
+                UAV_Parameters::SYS_ID, UAV_Parameters::COMP_ID,
+                UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP, true);
             
-            // mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
+            mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
             
             UAV::logger().Write("MAVL", "TimeUS,Device,BaudRate", "QZI",
                                UAV::logger().getMicroseconds(),
