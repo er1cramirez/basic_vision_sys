@@ -14,6 +14,7 @@ UAVController::UAVController()
     : running(false),
       httpVisualizationEnabled(false),
       httpVisualizationPort(8888),
+      visualizationUpdateRateHz(10),  // Default 10 FPS for visualization
       stateMachine(stateData, controlData) {
           
     // Create log directory and prefix
@@ -248,6 +249,9 @@ bool UAVController::start() {
     visionThread = std::thread(&UAVController::visionThreadFunction, this);
     ekfThread = std::thread(&UAVController::ekfThreadFunction, this);
     controlThread = std::thread(&UAVController::controlThreadFunction, this);
+    if (httpVisualizationEnabled) {
+        visualizationThread = std::thread(&UAVController::visualizationThreadFunction, this);
+    }
     
     // Update visualization status
     if (debugVisualizer) {
@@ -311,7 +315,8 @@ void UAVController::join() {
     if (visionThread.joinable()) visionThread.join();
     if (ekfThread.joinable()) ekfThread.join();
     if (controlThread.joinable()) controlThread.join();
-    // Note: No displayThread to join anymore
+    if (visualizationThread.joinable()) visualizationThread.join();
+
 }
 
 // Check if controller is running
@@ -336,12 +341,15 @@ void UAVController::visionThreadFunction() {
                        UAV::logger().getMicroseconds(),
                        "Vision thread started");
     
-    // Create drone reference frame transformation
     Eigen::Matrix4d droneTransform;
-    droneTransform << 0, -1, 0, 0,
-                      1, 0, 0, 0,
-                      0, 0, 1, 0,
-                      0, 0, 0, 1;
+        droneTransform << 0, -1, 0, 0,
+                        1, 0, 0, 0,
+                        0, 0, 1, 0,
+                        0, 0, 0, 1;
+    // Performance tracking
+    auto fpsStartTime = std::chrono::steady_clock::now();
+    int fpsFrameCount = 0;
+    double currentFps = 0.0;
     
     cv::Mat frame;
     ArucoInputFrame inputFrame;
@@ -365,13 +373,33 @@ void UAVController::visionThreadFunction() {
                 // Share result with other threads
                 arucoData.update(result);
                 
-                // Update HTTP visualizer if enabled (at 10 FPS)
-                // static int framesSinceLastUpdate = 0;
-                if (debugVisualizer && frameCount % 5 == 0) { // Every 5th frame for 10 FPS
-                    // debugVisualizer->updateArucoResult(result);
-                    debugVisualizer->updateFrame(result.debugImage);
+                // Update visualization data (FAST - no frame cloning here!)
+                if (httpVisualizationEnabled) {
+                    VisualizationData vizUpdate;
+                    vizUpdate.debugImage = result.debugImage;  // Direct assignment, no clone
+                    vizUpdate.frameId = frameCount;
+                    vizUpdate.visionFps = currentFps;
+                    vizUpdate.timestamp = std::chrono::steady_clock::now();
+                    
+                    // Add ArUco-specific data
+                    vizUpdate.setStatus("ArUco_Valid", result.detectionValid);
+                    if (result.detectionValid) {
+                        vizUpdate.setStatus("ArUco_X", result.position.x());
+                        vizUpdate.setStatus("ArUco_Y", result.position.y());
+                        vizUpdate.setStatus("ArUco_Z", result.position.z());
+                    }
+                    
+                    vizData.update(vizUpdate);
                 }
-                // framesSinceLastUpdate++;
+                
+                // Update FPS calculation
+                fpsFrameCount++;
+                auto fpsElapsed = std::chrono::steady_clock::now() - fpsStartTime;
+                if (fpsElapsed >= std::chrono::seconds(1)) {
+                    currentFps = fpsFrameCount / std::chrono::duration<double>(fpsElapsed).count();
+                    fpsFrameCount = 0;
+                    fpsStartTime = std::chrono::steady_clock::now();
+                }
                 
                 // Log frame processing
                 UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
@@ -379,34 +407,83 @@ void UAVController::visionThreadFunction() {
                                    frameCount,
                                    result.processingTimeMs,
                                    result.fps);
-                
-                // Log ArUco pose if detection is valid
-                if (result.detectionValid) {
-                    UAV::logger().Write("APOS", "TimeUS,PosX,PosY,PosZ,QuatW,QuatX,QuatY,QuatZ", "Qfffffff",
-                                      UAV::logger().getMicroseconds(),
-                                      static_cast<float>(result.position.x()),
-                                      static_cast<float>(result.position.y()),
-                                      static_cast<float>(result.position.z()),
-                                      static_cast<float>(result.orientation.w()),
-                                      static_cast<float>(result.orientation.x()),
-                                      static_cast<float>(result.orientation.y()),
-                                      static_cast<float>(result.orientation.z()));
-                }
             }
         }
         
-        // Maintain ~30 Hz
+        // Maintain target frame rate
         auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(20); // ~30 Hz
+        auto targetFrameTime = std::chrono::milliseconds(20); // ~50 Hz
         
         if (elapsed < targetFrameTime) {
             std::this_thread::sleep_for(targetFrameTime - elapsed);
         }
     }
-    
-    UAV::logger().Write("VTHR", "TimeUS,Status", "QZ",
+}
+
+// New visualization thread function
+void UAVController::visualizationThreadFunction() {
+    UAV::logger().Write("VIZT", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
-                       "Vision thread stopped");
+                       "Visualization thread started");
+    
+    const auto updatePeriod = std::chrono::milliseconds(1000 / visualizationUpdateRateHz);
+    auto nextUpdateTime = std::chrono::steady_clock::now();
+    
+    while (running) {
+        std::this_thread::sleep_until(nextUpdateTime);
+        
+        // Get latest visualization data
+        VisualizationData latestViz;
+        if (vizData.getData(latestViz)) {
+            // Update frame if available
+            if (!latestViz.debugImage.empty()) {
+                debugVisualizer->updateFrame(latestViz.debugImage, latestViz.frameId);
+            }
+            
+            // Update all status data
+            for (const auto& [key, value] : latestViz.statusData) {
+                debugVisualizer->setData(key, value);
+            }
+            
+            // Update system metrics
+            debugVisualizer->setData("Vision_FPS", latestViz.visionFps);
+            debugVisualizer->setData("EKF_FPS", latestViz.ekfFps);
+            debugVisualizer->setData("Control_FPS", latestViz.controlFps);
+        }
+        
+        // Also pull latest data from other sources
+        EKFStateResult ekfState;
+        if (stateData.getData(ekfState) && ekfState.valid) {
+            debugVisualizer->setData("EKF_PosX", ekfState.position.x());
+            debugVisualizer->setData("EKF_PosY", ekfState.position.y());
+            debugVisualizer->setData("EKF_PosZ", ekfState.position.z());
+            debugVisualizer->setData("EKF_VelX", ekfState.velocity.x());
+            debugVisualizer->setData("EKF_VelY", ekfState.velocity.y());
+            debugVisualizer->setData("EKF_VelZ", ekfState.velocity.z());
+        }
+        
+        ControlOutput control;
+        if (controlData.getData(control)) {
+            debugVisualizer->setData("Control_Fx", control.u_desired.x());
+            debugVisualizer->setData("Control_Fy", control.u_desired.y());
+            debugVisualizer->setData("Control_Fz", control.u_desired.z());
+        }
+        
+        // Update system status
+        debugVisualizer->setData("State", std::to_string(static_cast<int>(stateMachine.getState())));
+        debugVisualizer->setData("Mode", std::to_string(static_cast<int>(stateMachine.getControlMode())));
+        
+        nextUpdateTime += updatePeriod;
+        
+        // Handle timing overruns
+        if (nextUpdateTime < std::chrono::steady_clock::now()) {
+            nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
+        }
+    }
+    
+    UAV::logger().Write("VIZT", "TimeUS,Status", "QZ",
+                       UAV::logger().getMicroseconds(),
+                       "Visualization thread stopped");
 }
 
 // EKF thread function

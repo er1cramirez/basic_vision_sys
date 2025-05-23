@@ -8,7 +8,8 @@
 #include "Logger.h"
 #include "ImageSourceInterface.h"
 #include "mavlink_comm_module.h"
-#include "GenericDebugVisualizer.h"  // No dependencies!
+#include "GenericDebugVisualizer.h" 
+#include "VisualizationData.h"
 
 #include <thread>
 #include <atomic>
@@ -77,28 +78,38 @@ public:
     int getVisualizationPort() const;
 
 private:
-    // Visualization control
-    bool httpVisualizationEnabled;
-    int httpVisualizationPort;
-    std::unique_ptr<GenericDebugVisualizer> debugVisualizer;
-    
     // Thread synchronization
     std::atomic<bool> running;
     std::mutex controllerMutex;
-    
+
     // Thread handles
     std::thread visionThread;
     std::thread ekfThread;
     std::thread controlThread;
-    // Note: displayThread removed - replaced with HTTP server
+    std::thread visualizationThread;  // NEW: Separate visualization thread
     
     // Thread data exchange
     LatestData<ArucoPoseResult> arucoData;
     LatestData<EKFStateResult> stateData;
     LatestData<ControlOutput> controlData;
+    LatestData<VisualizationData> vizData;  // NEW: Visualization data exchange
+    
+    // Visualization control
+    bool httpVisualizationEnabled;
+    int httpVisualizationPort;
+    int visualizationUpdateRateHz;  // NEW: Configurable update rate
+    
+    
+    // Thread functions
+    void visionThreadFunction();
+    void ekfThreadFunction();
+    void controlThreadFunction();
+    void visualizationThreadFunction();  // NEW: Visualization thread function
+
     
     // System components
     std::unique_ptr<MavlinkCommModule> mavlinkModule;
+    std::unique_ptr<GenericDebugVisualizer> debugVisualizer;
     ImageSourcePtr imageSource;
     ArucoPosePipeline arucoProcessor;
     ArucoEKFEstimator ekfEstimator;
@@ -108,17 +119,11 @@ private:
     std::string logDirectory;
     std::string logPrefix;
     
-    // Thread functions
-    void visionThreadFunction();
-    void ekfThreadFunction();
-    void controlThreadFunction();
     
     // Helper functions
     void setupArucoPipeline();
     void setupEKFEstimator();
     
-    // Visualization helpers
-    void updateVisualization();
 };
 
 #endif // UAV_CONTROLLER_H
