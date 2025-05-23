@@ -59,7 +59,8 @@ bool UAVController::initialize() {
     
     // Create image source
     if (!UAV_Parameters::IS_SIMULATOR) {
-        imageSource = ImageSourceFactory::createCameraSource();
+        // imageSource = ImageSourceFactory::createCameraSource();
+        imageSource = ImageSourceFactory::createOptimizedCameraSource();
         
         UAV::logger().Write("SRCE", "TimeUS,Type", "QZ",
                            UAV::logger().getMicroseconds(),
