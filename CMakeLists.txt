@@ -12,7 +12,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Option to enable/disable Gazebo support
-option(WITH_GAZEBO "Build with Gazebo support" OFF)
+option(WITH_GAZEBO "Build with Gazebo support" ON)
 
 # Define a preprocessor macro to indicate Gazebo availability
 if(WITH_GAZEBO)
