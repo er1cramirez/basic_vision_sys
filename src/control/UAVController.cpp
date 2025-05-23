@@ -365,8 +365,12 @@ void UAVController::visionThreadFunction() {
                 inputFrame.sequenceId = frameCount++;
                 inputFrame.timestamp = std::chrono::steady_clock::now();
                 
+                auto arucoStartTime = std::chrono::steady_clock::now();
                 ArucoPoseResult result = arucoProcessor.process(inputFrame);
                 
+                auto arucoEndTime = std::chrono::steady_clock::now();
+                result.processingTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(arucoEndTime - arucoStartTime).count();
+
                 // Apply drone reference frame transformation
                 result.applyTransform(droneTransform);
                 
@@ -403,6 +407,7 @@ void UAVController::visionThreadFunction() {
                 // print FPS every 30 frames
                 if (frameCount % 30 == 0) {
                     std::cout << "FPS: " << currentFps << std::endl;
+                    std::cout << "Processing time: " << result.processingTimeMs << "ms" << std::endl;
                 }
                 
                 // Log frame processing
