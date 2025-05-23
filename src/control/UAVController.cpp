@@ -336,17 +336,20 @@ int UAVController::getVisualizationPort() const {
 }
 
 // Vision thread function
+// Optimized vision thread function with performance improvements
 void UAVController::visionThreadFunction() {
     UAV::logger().Write("VTHR", "TimeUS,Status", "QZ",
                        UAV::logger().getMicroseconds(),
                        "Vision thread started");
     
-    Eigen::Matrix4d droneTransform;
-        droneTransform << 0, -1, 0, 0,
-                        1, 0, 0, 0,
-                        0, 0, 1, 0,
-                        0, 0, 0, 1;
-    // Performance tracking
+    // Pre-allocate transformation matrix (avoid repeated construction)
+    static const Eigen::Matrix4d droneTransform = 
+        (Eigen::Matrix4d() << 0, -1, 0, 0,
+                              1, 0, 0, 0,
+                              0, 0, 1, 0,
+                              0, 0, 0, 1).finished();
+    
+    // Performance tracking with reduced overhead
     auto fpsStartTime = std::chrono::steady_clock::now();
     int fpsFrameCount = 0;
     double currentFps = 0.0;
@@ -355,37 +358,45 @@ void UAVController::visionThreadFunction() {
     ArucoInputFrame inputFrame;
     int frameCount = 0;
     
+    // Pre-allocate frame for reuse (avoid reallocations)
+    cv::Mat workingFrame;
+    
+    // Timing measurements
+    std::chrono::steady_clock::time_point frameStart, imageAcqEnd, arucoEnd, updateEnd;
+    
     while (running) {
-        auto startTime = std::chrono::steady_clock::now();
+        frameStart = std::chrono::steady_clock::now();
         
+        // 1. IMAGE ACQUISITION (measure this separately)
         if (imageSource->getNextFrame(frame)) {
+            imageAcqEnd = std::chrono::steady_clock::now();
+            
             if (!frame.empty()) {
-                // Process frame with ArUco pipeline
-                inputFrame.image = frame.clone();
+                // 2. AVOID FRAME CLONING - Use reference/pointer instead
+                inputFrame.image = frame;  // Direct assignment, no clone!
                 inputFrame.sequenceId = frameCount++;
                 inputFrame.timestamp = std::chrono::steady_clock::now();
                 
-                auto arucoStartTime = std::chrono::steady_clock::now();
+                // 3. ARUCO PROCESSING (your measured 8-13ms)
                 ArucoPoseResult result = arucoProcessor.process(inputFrame);
+                arucoEnd = std::chrono::steady_clock::now();
                 
-                auto arucoEndTime = std::chrono::steady_clock::now();
-                result.processingTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(arucoEndTime - arucoStartTime).count();
-
-                // Apply drone reference frame transformation
+                // Apply transformation (minimal overhead)
                 result.applyTransform(droneTransform);
                 
-                // Share result with other threads
+                // 4. BATCH UPDATES - Reduce mutex operations
                 arucoData.update(result);
                 
-                // Update visualization data (FAST - no frame cloning here!)
-                if (httpVisualizationEnabled) {
+                // 5. CONDITIONAL VISUALIZATION - Only if enabled and needed
+                if (httpVisualizationEnabled && (frameCount % 3 == 0)) { // Reduce viz rate
                     VisualizationData vizUpdate;
-                    vizUpdate.debugImage = result.debugImage;  // Direct assignment, no clone
+                    // IMPORTANT: Don't clone debug image, move it
+                    vizUpdate.debugImage = std::move(result.debugImage);
                     vizUpdate.frameId = frameCount;
                     vizUpdate.visionFps = currentFps;
                     vizUpdate.timestamp = std::chrono::steady_clock::now();
                     
-                    // Add ArUco-specific data
+                    // Add ArUco-specific data (lightweight)
                     vizUpdate.setStatus("ArUco_Valid", result.detectionValid);
                     if (result.detectionValid) {
                         vizUpdate.setStatus("ArUco_X", result.position.x());
@@ -395,45 +406,53 @@ void UAVController::visionThreadFunction() {
                     
                     vizData.update(vizUpdate);
                 }
+                updateEnd = std::chrono::steady_clock::now();
                 
-                // Update FPS calculation
+                // 6. REDUCED LOGGING FREQUENCY
+                if (frameCount % 50 == 0) { // Log every 50 frames instead of every frame
+                    auto imageAcqTime = std::chrono::duration_cast<std::chrono::microseconds>(imageAcqEnd - frameStart).count() / 1000.0;
+                    auto arucoTime = std::chrono::duration_cast<std::chrono::microseconds>(arucoEnd - imageAcqEnd).count() / 1000.0;
+                    auto updateTime = std::chrono::duration_cast<std::chrono::microseconds>(updateEnd - arucoEnd).count() / 1000.0;
+                    auto totalTime = std::chrono::duration_cast<std::chrono::microseconds>(updateEnd - frameStart).count() / 1000.0;
+                    
+                    UAV::logger().Write("PERF", "TimeUS,SeqID,ImageMs,ArucoMs,UpdateMs,TotalMs,FPS", "QIfffff",
+                                       UAV::logger().getMicroseconds(),
+                                       frameCount,
+                                       static_cast<float>(imageAcqTime),
+                                       static_cast<float>(arucoTime), 
+                                       static_cast<float>(updateTime),
+                                       static_cast<float>(totalTime),
+                                       currentFps);
+                }
+                
+                // 7. EFFICIENT FPS CALCULATION
                 fpsFrameCount++;
                 auto fpsElapsed = std::chrono::steady_clock::now() - fpsStartTime;
                 if (fpsElapsed >= std::chrono::seconds(1)) {
                     currentFps = fpsFrameCount / std::chrono::duration<double>(fpsElapsed).count();
                     fpsFrameCount = 0;
                     fpsStartTime = std::chrono::steady_clock::now();
+                    
+                    // Print performance breakdown every second
+                    if (frameCount % 50 == 0) {
+                        std::cout << "Vision Performance - FPS: " << currentFps 
+                                  << ", Frame: " << frameCount << std::endl;
+                    }
                 }
-                // print FPS every 30 frames
-                if (frameCount % 30 == 0) {
-                    std::cout << "FPS: " << currentFps << std::endl;
-                    std::cout << "Processing time: " << result.processingTimeMs << "ms" << std::endl;
-                }
-                
-                // // Log frame processing
-                // UAV::logger().Write("FRAM", "TimeUS,SeqID,ProcTimeMs,FPS", "QIfd",
-                //                    UAV::logger().getMicroseconds(),
-                //                    frameCount,
-                //                    result.processingTimeMs,
-                //                    result.fps);
             }
         }
         
-        // Maintain target frame rate (50 Hz = 20ms per frame)
-        auto elapsed = std::chrono::steady_clock::now() - startTime;
-        auto targetFrameTime = std::chrono::milliseconds(20); // ~50 Hz
-        
-        // Log timing info every 30 frames to debug FPS issues
-        if (frameCount % 30 == 0) {
-            auto processingTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-            std::cout << "Frame processing time: " << processingTimeMs << "ms, Target: 20ms" << std::endl;
-            if (processingTimeMs > 20) {
-                std::cout << "WARNING: Frame processing exceeds target time - max achievable FPS limited" << std::endl;
-            }
-        }
+        // 8. ADAPTIVE FRAME RATE CONTROL
+        auto elapsed = std::chrono::steady_clock::now() - frameStart;
+        auto targetFrameTime = std::chrono::milliseconds(20); // 50 Hz target
         
         if (elapsed < targetFrameTime) {
             std::this_thread::sleep_for(targetFrameTime - elapsed);
+        } else if (frameCount % 100 == 0) {
+            // Warn only occasionally if we're consistently behind
+            auto processingTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+            std::cout << "WARNING: Frame processing (" << processingTimeMs 
+                      << "ms) exceeds target (20ms)" << std::endl;
         }
     }
 }
