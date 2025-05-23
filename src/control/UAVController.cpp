@@ -414,9 +414,18 @@ void UAVController::visionThreadFunction() {
             }
         }
         
-        // Maintain target frame rate
+        // Maintain target frame rate (50 Hz = 20ms per frame)
         auto elapsed = std::chrono::steady_clock::now() - startTime;
         auto targetFrameTime = std::chrono::milliseconds(20); // ~50 Hz
+        
+        // Log timing info every 30 frames to debug FPS issues
+        if (frameCount % 30 == 0) {
+            auto processingTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+            std::cout << "Frame processing time: " << processingTimeMs << "ms, Target: 20ms" << std::endl;
+            if (processingTimeMs > 20) {
+                std::cout << "WARNING: Frame processing exceeds target time - max achievable FPS limited" << std::endl;
+            }
+        }
         
         if (elapsed < targetFrameTime) {
             std::this_thread::sleep_for(targetFrameTime - elapsed);
