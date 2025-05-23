@@ -94,9 +94,9 @@ public:
      */
     static ImageSourcePtr createOptimizedCameraSource(
         int cameraId = 0,
-        int width = 640,
-        int height = 480,
-        double fps = 100.0) {  // Default to high FPS
+        int width = 1280,
+        int height = 720,
+        double fps = 60.0) {  // Default to high FPS
         
         auto camera = std::make_shared<CameraSource>(
             cameraId, width, height, fps, 
