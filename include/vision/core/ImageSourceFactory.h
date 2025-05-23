@@ -106,7 +106,7 @@ public:
         
         // Configure for maximum performance
         camera->setShouldCopyFrame(false);  // Zero-copy when possible
-        camera->setPreprocessType(FramePreprocessType::RAW);  // No preprocessing
+        camera->setPreprocessType(FramePreprocessType::GRAYSCALE);  // No preprocessing
         
         return camera;
     }
@@ -120,7 +120,7 @@ public:
         
         if (useCase == "aruco_tracking") {
             // Optimized for ArUco marker tracking
-            auto camera = createOptimizedCameraSource(cameraId, 640, 480, 100.0);
+            auto camera = createOptimizedCameraSource(cameraId, 1280, 720, 60.0);
             
             // ArUco works well with grayscale
             std::dynamic_pointer_cast<CameraSource>(camera)->setPreprocessType(
