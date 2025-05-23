@@ -100,7 +100,7 @@ bool UAVController::initialize() {
     // Initialize HTTP visualization if enabled
     if (httpVisualizationEnabled) {
         debugVisualizer = std::make_unique<GenericDebugVisualizer>(httpVisualizationPort);
-        debugVisualizer->setJpegQuality(75);
+        debugVisualizer->setJpegQuality(30);
         debugVisualizer->setMaxFrameSize(640, 480);
         
         UAV::logger().Write("HTTP", "TimeUS,Port,Status", "QIZ",
