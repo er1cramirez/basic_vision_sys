@@ -124,6 +124,28 @@ bool UAVController::initialize() {
                        "Controller initialized successfully");
 
     // Initialize MAVLink communication
+    if (UAV_Parameters::MAVLINK_ENABLED) {
+        if (!initializeMavlink()) {
+            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
+                               UAV::logger().getMicroseconds(),
+                               "Failed to initialize MAVLink communication");
+            return false;
+        }
+    } else {
+        std::cout << "MAVLink communication disabled" << std::endl;
+    }
+    
+    
+    return true;
+}
+
+// Initialize MAVLink communication
+bool UAVController::initializeMavlink() {
+    if (mavlinkModule) {
+        std::cerr << "MAVLink module already initialized" << std::endl;
+        return false;
+    }
+    
     if (UAV_Parameters::IS_SIMULATOR) {
         try {
             mavlinkModule = std::make_unique<MavlinkCommModule>(
@@ -163,10 +185,8 @@ bool UAVController::initialize() {
             return false;
         }
     }
-    
     return true;
 }
-
 // Configure ArUco pipeline
 void UAVController::setupArucoPipeline() {
     ArucoPoseSettings settings;

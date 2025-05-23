@@ -121,6 +121,7 @@ private:
     
     
     // Helper functions
+    bool initializeMavlink();
     void setupArucoPipeline();
     void setupEKFEstimator();
     
