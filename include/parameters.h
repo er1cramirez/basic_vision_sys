@@ -7,7 +7,7 @@
 
 namespace UAV_Parameters {
     // Default values
-    const bool IS_SIMULATOR = false;
+    const bool IS_SIMULATOR = true;
     const bool MAVLINK_ENABLED = false;
 
     // Simulation parameters

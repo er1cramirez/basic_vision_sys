@@ -23,7 +23,6 @@
  * Features:
  * - Live video streaming via HTTP
  * - Generic key-value data display
- * - No dependencies on specific pipeline types
  * - Lightweight and reusable
  * - Modern web interface
  */
