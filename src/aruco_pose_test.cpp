@@ -83,12 +83,6 @@ void displayEKFResults(const EKFStateResult& result) {
                   << result.positionStdDev.y() << ", ±" 
                   << result.positionStdDev.z() << ")" << std::endl;
         
-        std::cout << "Orientation (quaternion w,x,y,z): " 
-                  << result.orientation.w() << ", " 
-                  << result.orientation.x() << ", " 
-                  << result.orientation.y() << ", " 
-                  << result.orientation.z() << std::endl;
-        
         std::cout << "Velocity (vx,vy,vz): " 
                   << result.velocity.x() << ", " 
                   << result.velocity.y() << ", " 
@@ -97,10 +91,10 @@ void displayEKFResults(const EKFStateResult& result) {
                   << result.velocityStdDev.y() << ", ±" 
                   << result.velocityStdDev.z() << ")" << std::endl;
         
-        std::cout << "Angular Velocity (wx,wy,wz): " 
-                  << result.angularVelocity.x() << ", " 
-                  << result.angularVelocity.y() << ", " 
-                  << result.angularVelocity.z() << std::endl;
+        std::cout << "Acceleration (ax,ay,az): " 
+                  << result.acceleration.x() << ", " 
+                  << result.acceleration.y() << ", " 
+                  << result.acceleration.z() << std::endl;
     }
     
     std::cout << "===========================================" << std::endl;
@@ -400,17 +394,6 @@ void testArucoEKF(ImageSourcePtr source, const std::string& windowName, int maxF
                                       static_cast<float>(ekfState.velocity.x()),
                                       static_cast<float>(ekfState.velocity.y()),
                                       static_cast<float>(ekfState.velocity.z()));
-                    
-                    // Log EKF orientation and angular velocity
-                    UAV::logger().Write("EKFO", "TimeUS,QuatW,QuatX,QuatY,QuatZ,AngVelX,AngVelY,AngVelZ", "Qfffffff",
-                                      UAV::logger().getMicroseconds(),
-                                      static_cast<float>(ekfState.orientation.w()),
-                                      static_cast<float>(ekfState.orientation.x()),
-                                      static_cast<float>(ekfState.orientation.y()),
-                                      static_cast<float>(ekfState.orientation.z()),
-                                      static_cast<float>(ekfState.angularVelocity.x()),
-                                      static_cast<float>(ekfState.angularVelocity.y()),
-                                      static_cast<float>(ekfState.angularVelocity.z()));
                 }
                 
                 lastEkfPredictionTime = currentTime;

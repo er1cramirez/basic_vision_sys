@@ -539,14 +539,17 @@ void UAVController::ekfThreadFunction() {
                 
                 // Log state (at reduced rate)
                 if (predictionCount % 10 == 0) {
-                    UAV::logger().Write("EKFS", "TimeUS,PosX,PosY,PosZ,VelX,VelY,VelZ", "Qffffff",
+                    UAV::logger().Write("EKFS", "TimeUS,PosX,PosY,PosZ,VelX,VelY,VelZ,AccX,AccY,AccZ", "Qfffffffff",
                                       UAV::logger().getMicroseconds(),
                                       static_cast<float>(state.position.x()),
                                       static_cast<float>(state.position.y()),
                                       static_cast<float>(state.position.z()),
                                       static_cast<float>(state.velocity.x()),
                                       static_cast<float>(state.velocity.y()),
-                                      static_cast<float>(state.velocity.z()));
+                                      static_cast<float>(state.velocity.z()),
+                                      static_cast<float>(state.acceleration.x()),
+                                      static_cast<float>(state.acceleration.y()),
+                                      static_cast<float>(state.acceleration.z()));
                 }
             }
         }
