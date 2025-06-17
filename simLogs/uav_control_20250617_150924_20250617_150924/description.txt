@@ -1,0 +1,18 @@
+UAV Vision Control System Log Description
+Created: 2025-06-17 15:09:24
+Format Specifiers:
+  Q = uint64_t, q = int64_t
+  I = uint32_t, i = int32_t
+  H = uint16_t, h = int16_t
+  B = uint8_t, b = int8_t
+  f = float, d = double
+  N = char[16], Z = char[64]
+-------------------------------------------------------------------
+Message Types:
+INIT: TimeUS,Component (QZ)
+STAT: TimeUS,State,Mode (QII)
+ARUC: TimeUs,SeqID,PosX,PosY,PosZ,Valid (QQfffb)
+POST: TimeUs,SeqID,PosX,PosY,PosZ,Valid (QQfffb)
+FRAM: TimeUS,SeqID,ProcTimeMs,FPS (QIfd)
+CTRL: TimeUS,u_x,u_y,u_z (Qfff)
+EKFS: TimeUS,PosX,PosY,PosZ,VelX,VelY,VelZ,AccX,AccY,AccZ (Qfffffffff)

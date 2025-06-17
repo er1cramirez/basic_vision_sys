@@ -20,7 +20,7 @@ EKFEstimatorConfig::EKFEstimatorConfig()
       velocityProcessNoise(0.1),          // 0.1 m²/s²
       accelerationProcessNoise(0.5),      // 0.5 m²/s⁴
       positionMeasurementNoise(0.01),     // 0.01 m²
-      predictionFrequencyHz(100.0),       // 100 Hz
+      predictionFrequencyHz(50.0),       // 50 Hz
       maxTimeDelta(0.1) {                 // 100 ms
 }
 

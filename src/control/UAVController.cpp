@@ -2,6 +2,7 @@
 #include "ImageSourceFactory.h"
 #include "Logger.h"
 #include "parameters.h"
+#include "SimpleTelemetry.h"
 
 #include <iostream>
 #include <chrono>
@@ -33,6 +34,9 @@ UAVController::~UAVController() {
     if (running) {
         stop();
     }
+    
+    // Shutdown telemetry
+    SimpleTelemetry::shutdown();
 }
 
 // Initialize the controller
@@ -52,32 +56,22 @@ bool UAVController::initialize() {
         }
     }
     
-    // Log initialization
-    UAV::logger().Write("BOOT", "TimeUS,Version", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "UAV Controller 1.0 (Headless)");
-    
+    // Initialize telemetry system
+    if (!SimpleTelemetry::initialize(14559)) {
+        std::cerr << "Warning: Failed to initialize telemetry system" << std::endl;
+        // Continue anyway, telemetry is optional
+    } else {
+        std::cout << "Telemetry system initialized on port 14559" << std::endl;
+    }
     // Create image source
     if (!UAV_Parameters::IS_SIMULATOR) {
         imageSource = ImageSourceFactory::createCameraSource();
-        
-        UAV::logger().Write("SRCE", "TimeUS,Type", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Camera");
     } else {
         imageSource = ImageSourceFactory::createGazeboSource();
-        
-        UAV::logger().Write("SRCE", "TimeUS,Type", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Gazebo");
     }
     
     // Initialize image source
     if (!imageSource || !imageSource->initialize()) {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Failed to initialize image source");
-        
         std::cerr << "Failed to initialize image source" << std::endl;
         return false;
     }
@@ -90,10 +84,6 @@ bool UAVController::initialize() {
     
     // Initialize state machine
     if (!stateMachine.initialize()) {
-        UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "Failed to initialize state machine");
-        
         std::cerr << "Failed to initialize state machine" << std::endl;
         return false;
     }
@@ -103,44 +93,21 @@ bool UAVController::initialize() {
         debugVisualizer = std::make_unique<GenericDebugVisualizer>(httpVisualizationPort);
         debugVisualizer->setJpegQuality(30);
         debugVisualizer->setMaxFrameSize(640, 480);
-        
-        UAV::logger().Write("HTTP", "TimeUS,Port,Status", "QIZ",
-                           UAV::logger().getMicroseconds(),
-                           httpVisualizationPort,
-                           "HTTP visualizer initialized");
-        
         std::cout << "HTTP visualization will be available at: http://localhost:" 
                   << httpVisualizationPort << std::endl;
     } else {
-        UAV::logger().Write("HTTP", "TimeUS,Status", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "HTTP visualizer disabled - running headless");
-        
         std::cout << "Running in headless mode (no visualization)" << std::endl;
     }
-    
-    UAV::logger().Write("INIT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Controller initialized successfully");
-
     // Initialize MAVLink communication
     if (UAV_Parameters::IS_SIMULATOR) {
         try {
             mavlinkModule = std::make_unique<MavlinkCommModule>(
                 UAV_Parameters::UDP_IP, UAV_Parameters::GZ_MAV_PORT, 
                 UAV_Parameters::SYS_ID, UAV_Parameters::COMP_ID,
-                UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP);
-            
+                UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP);   
             mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
-            
-            UAV::logger().Write("MAVL", "TimeUS,IP,Port", "QZI",
-                               UAV::logger().getMicroseconds(),
-                               UAV_Parameters::UDP_IP.c_str(),
-                               UAV_Parameters::GZ_MAV_PORT);
         } catch (const std::exception& e) {
-            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                               UAV::logger().getMicroseconds(),
-                               e.what());
+            std::cerr << "Failed to initialize MAVLink communication: " << e.what() << std::endl;
             return false;
         }
     } else {
@@ -151,15 +118,8 @@ bool UAVController::initialize() {
                 UAV_Parameters::TG_ID, UAV_Parameters::TG_COMP, true);
             
             mavlinkModule->setFrequency(UAV_Parameters::COM_FREQ);
-            
-            UAV::logger().Write("MAVL", "TimeUS,Device,BaudRate", "QZI",
-                               UAV::logger().getMicroseconds(),
-                               UAV_Parameters::MAV_SER_DEV.c_str(),
-                               UAV_Parameters::SER_BAUD);
         } catch (const std::exception& e) {
-            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                               UAV::logger().getMicroseconds(),
-                               e.what());
+            std::cerr << "Failed to initialize MAVLink communication: " << e.what() << std::endl;
             return false;
         }
     }
@@ -191,13 +151,6 @@ void UAVController::setupArucoPipeline() {
     }
     
     arucoProcessor.setCalibration(calibration);
-    
-    UAV::logger().Write("ACFG", "TimeUS,DictID,MarkerSize,UseCornerRef,MaxError", "QIfBf",
-                       UAV::logger().getMicroseconds(),
-                       settings.dictionaryId,
-                       settings.markerSizeMeters,
-                       settings.useCornerRefinement ? 1 : 0,
-                       settings.maxReprojectionError);
 }
 
 // Configure EKF estimator
@@ -221,30 +174,16 @@ bool UAVController::start() {
     if (httpVisualizationEnabled && debugVisualizer) {
         debugVisualizer->start();
         debugVisualizer->setStatus("System Starting...");
-        
-        UAV::logger().Write("HTTP", "TimeUS,Status", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "HTTP visualizer started");
     }
     
     // Start MAVLink module if it exists
     if (mavlinkModule) {
         if (!mavlinkModule->start()) {
-            UAV::logger().Write("ERRR", "TimeUS,Message", "QZ",
-                               UAV::logger().getMicroseconds(),
-                               "Failed to start MAVLink communication");
+            std::cerr << "Failed to start MAVLink communication" << std::endl;
             return false;
         }
-        
-        UAV::logger().Write("MAVL", "TimeUS,Status", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "MAVLink communication started");
+        std::cout << "MAVLink communication started" << std::endl;
     }
-    
-    // Start threads
-    UAV::logger().Write("STRT", "TimeUS,Message", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Starting controller threads");
     
     visionThread = std::thread(&UAVController::visionThreadFunction, this);
     ekfThread = std::thread(&UAVController::ekfThreadFunction, this);
@@ -269,12 +208,7 @@ void UAVController::stop() {
         return;
     }
     
-    running = false;
-    
-    UAV::logger().Write("STOP", "TimeUS,Message", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Stopping controller threads");
-    
+    running = false;    
     // Update visualization status
     if (debugVisualizer) {
         debugVisualizer->setStatus("System Stopping...");
@@ -287,26 +221,15 @@ void UAVController::stop() {
     if (debugVisualizer) {
         debugVisualizer->stop();
         std::cout << "HTTP visualizer stopped" << std::endl;
-        UAV::logger().Write("HTTP", "TimeUS,Status", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "HTTP visualizer stopped");
     }
     
     // Stop MAVLink
     if (mavlinkModule) {
         mavlinkModule->stop();
         std::cout << "MAVLink communication stopped" << std::endl;
-        UAV::logger().Write("MAVL", "TimeUS,Status", "QZ",
-                           UAV::logger().getMicroseconds(),
-                           "MAVLink communication stopped");
     } else {
         std::cout << "No MAVLink communication to stop" << std::endl;
     }
-    
-    UAV::logger().Write("EXIT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Normal shutdown");
-    
     UAV::logger().close();
 }
 
@@ -337,10 +260,6 @@ int UAVController::getVisualizationPort() const {
 
 // Vision thread function
 void UAVController::visionThreadFunction() {
-    UAV::logger().Write("VTHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Vision thread started");
-    
     Eigen::Matrix4d droneTransform;
         droneTransform << 0, -1, 0, 0,
                         1, 0, 0, 0,
@@ -366,9 +285,29 @@ void UAVController::visionThreadFunction() {
                 inputFrame.timestamp = std::chrono::steady_clock::now();
                 
                 ArucoPoseResult result = arucoProcessor.process(inputFrame);
+
+                // Log aruco position if valid
+                if (result.detectionValid) {
+                    UAV::logger().Write("ARUC", "TimeUs,SeqID,PosX,PosY,PosZ,Valid", "QQfffb",
+                                       UAV::logger().getMicroseconds(),
+                                       inputFrame.sequenceId,
+                                       result.position.x(),
+                                       result.position.y(),
+                                       result.position.z(),
+                                       result.detectionValid);
+                } 
                 
                 // Apply drone reference frame transformation
                 result.applyTransform(droneTransform);
+
+                // Log Aruco after transformation
+                UAV::logger().Write("POST", "TimeUs,SeqID,PosX,PosY,PosZ,Valid", "QQfffb",
+                                   UAV::logger().getMicroseconds(),
+                                   inputFrame.sequenceId,
+                                   result.position.x(),
+                                   result.position.y(),
+                                   result.position.z(),
+                                   result.detectionValid);
                 
                 // Share result with other threads
                 arucoData.update(result);
@@ -421,11 +360,7 @@ void UAVController::visionThreadFunction() {
 }
 
 // New visualization thread function
-void UAVController::visualizationThreadFunction() {
-    UAV::logger().Write("VIZT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Visualization thread started");
-    
+void UAVController::visualizationThreadFunction() {    
     const auto updatePeriod = std::chrono::milliseconds(1000 / visualizationUpdateRateHz);
     auto nextUpdateTime = std::chrono::steady_clock::now();
     
@@ -480,19 +415,11 @@ void UAVController::visualizationThreadFunction() {
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
     }
-    
-    UAV::logger().Write("VIZT", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Visualization thread stopped");
 }
 
 // EKF thread function
-void UAVController::ekfThreadFunction() {
-    UAV::logger().Write("ETHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "EKF thread started");
-    
-    const auto updatePeriod = std::chrono::milliseconds(10); // 100Hz
+void UAVController::ekfThreadFunction() {    
+    const auto updatePeriod = std::chrono::milliseconds(20); // 50Hz
     auto nextUpdateTime = std::chrono::steady_clock::now();
     
     ArucoPoseResult latestAruco;
@@ -509,16 +436,11 @@ void UAVController::ekfThreadFunction() {
             if (latestAruco.detectionValid) {
                 if (!ekfEstimator.isInitialized()) {
                     if (ekfEstimator.initialize(latestAruco, arucoTimestamp)) {
-                        UAV::logger().Write("EKFI", "TimeUS,Status", "QZ",
-                                          UAV::logger().getMicroseconds(),
-                                          "EKF initialized");
+                        std::cout << "EKF initialized with first ArUco measurement" << std::endl;
                     }
                 } else {
                     if (ekfEstimator.update(latestAruco, arucoTimestamp)) {
                         updateCount++;
-                        UAV::logger().Write("EKFU", "TimeUS,Count", "QI",
-                                          UAV::logger().getMicroseconds(),
-                                          updateCount);
                     }
                 }
             }
@@ -532,10 +454,51 @@ void UAVController::ekfThreadFunction() {
                 EKFStateResult state = ekfEstimator.getStateEstimate();
                 stateData.update(state);
                 
+                // Send telemetry data
+                if (state.valid) {
+                    // Position data
+                    TEL_VECTOR("ekf/position", state.position.x(), state.position.y(), state.position.z());
+                    TEL_NUMBER("ekf/position_x", state.position.x());
+                    TEL_NUMBER("ekf/position_y", state.position.y());
+                    TEL_NUMBER("ekf/position_z", state.position.z());
+                    TEL_NUMBER("ekf/position_magnitude", state.position.norm());
+                    
+                    // Velocity data
+                    TEL_VECTOR("ekf/velocity", state.velocity.x(), state.velocity.y(), state.velocity.z());
+                    TEL_NUMBER("ekf/velocity_x", state.velocity.x());
+                    TEL_NUMBER("ekf/velocity_y", state.velocity.y());
+                    TEL_NUMBER("ekf/velocity_z", state.velocity.z());
+                    TEL_NUMBER("ekf/velocity_magnitude", state.velocity.norm());
+                    
+                    // Acceleration data
+                    TEL_VECTOR("ekf/acceleration", state.acceleration.x(), state.acceleration.y(), state.acceleration.z());
+                    TEL_NUMBER("ekf/acceleration_x", state.acceleration.x());
+                    TEL_NUMBER("ekf/acceleration_y", state.acceleration.y());
+                    TEL_NUMBER("ekf/acceleration_z", state.acceleration.z());
+                    TEL_NUMBER("ekf/acceleration_magnitude", state.acceleration.norm());
+                    
+                    // Uncertainty data
+                    TEL_VECTOR("ekf/position_stddev", state.positionStdDev.x(), state.positionStdDev.y(), state.positionStdDev.z());
+                    TEL_NUMBER("ekf/position_uncertainty", state.positionStdDev.norm());
+                    TEL_VECTOR("ekf/velocity_stddev", state.velocityStdDev.x(), state.velocityStdDev.y(), state.velocityStdDev.z());
+                    TEL_NUMBER("ekf/velocity_uncertainty", state.velocityStdDev.norm());
+                    TEL_VECTOR("ekf/acceleration_stddev", state.accelerationStdDev.x(), state.accelerationStdDev.y(), state.accelerationStdDev.z());
+                    TEL_NUMBER("ekf/acceleration_uncertainty", state.accelerationStdDev.norm());
+                    
+                    // Status indicators
+                    TEL_BOOL("ekf/valid", state.valid);
+                    TEL_NUMBER("ekf/prediction_count", predictionCount);
+                }
+                
                 // Update HTTP visualizer if enabled
                 if (debugVisualizer) {
                     // debugVisualizer->updateEKFState(state);
                 }
+                
+                // Additional system telemetry
+                TEL_NUMBER("system/ekf_update_count", updateCount);
+                TEL_NUMBER("system/ekf_prediction_count", predictionCount);
+                TEL_BOOL("system/ekf_initialized", ekfEstimator.isInitialized());
                 
                 // Log state (at reduced rate)
                 if (predictionCount % 10 == 0) {
@@ -557,27 +520,14 @@ void UAVController::ekfThreadFunction() {
         nextUpdateTime += updatePeriod;
         
         if (nextUpdateTime < std::chrono::steady_clock::now()) {
-            UAV::logger().Write("EWRN", "TimeUS,Warning", "QZ",
-                              UAV::logger().getMicroseconds(),
-                              "EKF thread falling behind schedule");
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
     }
-    
-    UAV::logger().Write("ETHR", "TimeUS,Status,PredCount,UpdateCount", "QZII",
-                       UAV::logger().getMicroseconds(),
-                       "EKF thread stopped",
-                       predictionCount,
-                       updateCount);
 }
 
 // Control thread function
 void UAVController::controlThreadFunction() {
-    UAV::logger().Write("CTHR", "TimeUS,Status", "QZ",
-                       UAV::logger().getMicroseconds(),
-                       "Control thread started");
-    
-    const auto updatePeriod = std::chrono::milliseconds(10); // 100Hz
+    const auto updatePeriod = std::chrono::milliseconds(20); // 50Hz
     auto nextUpdateTime = std::chrono::steady_clock::now();
     int cycleCount = 0;
     
@@ -608,7 +558,7 @@ void UAVController::controlThreadFunction() {
                 
                 // Log force vector (every 10th update)
                 if (cycleCount % 10 == 0) {
-                    UAV::logger().Write("MAVF", "TimeUS,Fx,Fy,Fz", "Qfff",
+                    UAV::logger().Write("CTRL", "TimeUS,Fx,Fy,Fz", "Qfff",
                                       UAV::logger().getMicroseconds(),
                                       static_cast<float>(control.u_desired.x()),
                                       static_cast<float>(control.u_desired.y()),
@@ -620,15 +570,7 @@ void UAVController::controlThreadFunction() {
         nextUpdateTime += updatePeriod;
         
         if (nextUpdateTime < std::chrono::steady_clock::now()) {
-            UAV::logger().Write("CWRN", "TimeUS,Warning", "QZ",
-                              UAV::logger().getMicroseconds(),
-                              "Control thread falling behind schedule");
             nextUpdateTime = std::chrono::steady_clock::now() + updatePeriod;
         }
     }
-    
-    UAV::logger().Write("CTHR", "TimeUS,Status,CycleCount", "QZI",
-                       UAV::logger().getMicroseconds(),
-                       "Control thread stopped",
-                       cycleCount);
 }

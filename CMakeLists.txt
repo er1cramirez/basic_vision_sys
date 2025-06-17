@@ -41,6 +41,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/control
     ${CMAKE_CURRENT_SOURCE_DIR}/include/mavcomm
     ${CMAKE_CURRENT_SOURCE_DIR}/include/visualization  # Add visualization include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/telemetry      # Add telemetry include
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
 )
@@ -89,6 +90,15 @@ set(VISUALIZATION_SOURCES
     src/visualization/GenericDebugVisualizer.cpp
 )
 
+# Add telemetry sources (simplified version only)
+set(TELEMETRY_SOURCES
+    src/SimpleTelemetry.cpp
+    # Commenting out complex telemetry for now due to build issues
+    # src/telemetry/TelemetryEntry.cpp
+    # src/telemetry/TelemetryPublisher.cpp
+    # tools/example_scope/udp_telemetry_server.cpp
+)
+
 # Create UAV Controller test executable
 add_executable(uav_controller_test 
     src/uav_controller_test.cpp
@@ -97,6 +107,7 @@ add_executable(uav_controller_test
     ${LOGGER_SOURCES}
     ${CONTROL_SOURCES}
     ${MAV_COM_SOURCES}
+    ${TELEMETRY_SOURCES}
     ${VISUALIZATION_SOURCES}  # Add visualization sources
 )
 
@@ -115,6 +126,49 @@ if(WITH_GAZEBO)
         ${gz-msgs10_LIBRARIES}
     )
 endif()
+
+# Add test telemetry executable
+add_executable(test_telemetry
+    test_telemetry.cpp
+    ${TELEMETRY_SOURCES}
+)
+
+target_link_libraries(test_telemetry
+    ${OpenCV_LIBS}
+    ${CMAKE_THREAD_LIBS_INIT}
+    ${OPENSSL_LIBRARIES}
+    Eigen3::Eigen
+)
+
+# Create logs directory if it doesn't exist
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
+
+# Build telemetry examples (commented out temporarily due to old system dependencies)
+# add_executable(telemetry_example
+#     examples/telemetry_example.cpp
+#     ${TELEMETRY_SOURCES}
+#     ${LOGGER_SOURCES}
+# )
+
+# target_link_libraries(telemetry_example
+#     ${OpenCV_LIBS}
+#     ${CMAKE_THREAD_LIBS_INIT}
+#     ${OPENSSL_LIBRARIES}
+#     Eigen3::Eigen
+# )
+
+# add_executable(simple_telemetry_example
+#     examples/simple_telemetry_example.cpp
+#     ${TELEMETRY_SOURCES}
+#     ${LOGGER_SOURCES}
+# )
+
+# target_link_libraries(simple_telemetry_example
+#     ${OpenCV_LIBS}
+#     ${CMAKE_THREAD_LIBS_INIT}
+#     ${OPENSSL_LIBRARIES}
+#     Eigen3::Eigen
+# )
 
 # Add build-specific compiler optimizations for release builds
 if(CMAKE_BUILD_TYPE MATCHES "Release")
@@ -145,9 +199,6 @@ if(CMAKE_BUILD_TYPE MATCHES "Release")
         message(STATUS "Enabling link-time optimization")
     endif()
 endif()
-
-# Create logs directory if it doesn't exist
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)
 
 # Print configuration summary
 message(STATUS "=== Build Configuration ===")
