@@ -157,7 +157,7 @@ public:
         // Control and its derivative
         double kp = -0.02;
         output.u_desired = error * kp;
-        output.u_desired_dot = error_dot * 0.0;
+        output.u_desired_dot = error_dot * kp;
         
         return output;
     }
