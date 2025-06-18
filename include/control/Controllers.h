@@ -93,14 +93,37 @@ public:
         double cr = 0.1; // Radial velocity gain
         double ct = 0.0; // Tangential velocity gain
 
+        // Simplified version of planning equations(No height dependence)
         // Vectorial distance to target
         Eigen::Vector3d d_vector = -state.position;
         // discard the z component
         d_vector.z() = 0;
+        Eigen::Vector3d d_vector_dot = -state.velocity;
+        // discard the z component
+        d_vector_dot.z() = 0;
+
         // Unit vector to target
         Eigen::Vector3d _R = d_vector.normalized();
-        // Escalar distance to target
+        // Scalar distance to target
         double d = d_vector.norm();
+
+        // Derivative of d respect to time
+        // d/dt d = R' * d_vector_dot
+        // where R' is the transpose of R
+        double d_dot = _R.dot(d_vector_dot);
+
+        // Then for R_dot we have:
+        // R_dot = (I - R * R') * d_vector_dot / d_vector.norm()
+        // Eigen::Matrix3d I = Eigen::Matrix3d::Identity();
+        // Eigen::Matrix3d R_RT = _R * _R.transpose();
+        // Eigen::Vector3d R_dot = (I - R_RT) * d_vector_dot / d;
+
+        // Alternative (more efficient) computation:
+        // R_dot = (d_vector_dot - _R * (_R.dot(d_vector_dot))) / d
+        // Which is equivalent to:
+        Eigen::Vector3d R_dot = (d_vector_dot - _R * d_dot) / d;
+        
+
         // Tangential unity vector (z axis)
         Eigen::Vector3d _T = Eigen::Vector3d(0, 0, 1);
 
@@ -109,15 +132,32 @@ public:
         // Tangential velocity regulator mu_t = sech(d)
         double mu_t = 1 / std::cosh(d);
 
+        // Calculate derivatives of the velocity regulators
+        // d/dt(mu_r) = d/dt(tanh(d)) = sech²(d) * d_dot
+        double mu_r_dot = (1 - mu_r * mu_r) * d_dot;  // since sech²(d) = 1 - tanh²(d)
+
+        // d/dt(mu_t) = d/dt(sech(d)) = -sech(d) * tanh(d) * d_dot
+        double mu_t_dot = -mu_t * mu_r * d_dot;
+
+
         // Desired velocity vector
         Eigen::Vector3d v_desired = mu_r * cr * _R + mu_t * ct * _T;
-        // Simple P controller for position
+
+        // Calculate v_desired_dot
+        // d/dt(v_desired) = d/dt(mu_r * cr * _R + mu_t * ct * _T)
+        //                 = mu_r_dot * cr * _R + mu_r * cr * R_dot + mu_t_dot * ct * _T
+        Eigen::Vector3d v_desired_dot = mu_r_dot * cr * _R + 
+                                        mu_r * cr * R_dot + 
+                                        mu_t_dot * ct * _T;
+        // Note: _T is constant, so its derivative is zero
+        // Calculate velocity error and its derivative
         Eigen::Vector3d error = state.velocity - v_desired;
+        Eigen::Vector3d error_dot = state.acceleration - v_desired_dot;  // assuming you have acceleration in state
+
+        // Control and its derivative
         double kp = -0.02;
-        // double kd = 0.035;
         output.u_desired = error * kp;
-        
-        output.u_desired_dot = Eigen::Vector3d::Zero(); // No acceleration control
+        output.u_desired_dot = error_dot * 0.0;
         
         return output;
     }
