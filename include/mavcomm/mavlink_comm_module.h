@@ -117,6 +117,29 @@ public:
      */
     void registerMessageCallback(std::function<void(const mavlink_message_t&)> callback);
     
+    /**
+     * @brief Request ATTITUDE_QUATERNION messages from the vehicle
+     * @param interval_us Interval between messages in microseconds (default: 100000 = 10Hz)
+     * @return True if request was sent successfully
+     */
+    bool requestAttitudeQuaternion(uint32_t interval_us = 100000);
+    
+    /**
+     * @brief Get the latest attitude quaternion data
+     * @param q1 Quaternion component 1 (w)
+     * @param q2 Quaternion component 2 (x)
+     * @param q3 Quaternion component 3 (y)
+     * @param q4 Quaternion component 4 (z)
+     * @return True if valid quaternion data is available
+     */
+    bool getAttitudeQuaternion(float& q1, float& q2, float& q3, float& q4) const;
+    
+    /**
+     * @brief Get the latest attitude quaternion timestamp
+     * @return Timestamp in microseconds since Unix epoch
+     */
+    uint64_t getQuaternionTimestamp() const;
+    
 private:
     // Communication parameters
     std::unique_ptr<Generic_Port> port_;
@@ -135,6 +158,15 @@ private:
     float force_derivative_y_ = 0.0f;
     float force_derivative_z_ = 0.0f;
     uint64_t msg_seq_ = 0;
+    
+    // Attitude quaternion data
+    mutable std::mutex quaternion_mutex_;
+    float q1_ = 1.0f;  // w component (real part)
+    float q2_ = 0.0f;  // x component
+    float q3_ = 0.0f;  // y component  
+    float q4_ = 0.0f;  // z component
+    uint64_t quaternion_timestamp_ = 0;
+    bool quaternion_valid_ = false;
     
     // Thread control
     std::atomic<bool> running_{false};

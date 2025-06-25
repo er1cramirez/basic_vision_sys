@@ -270,6 +270,10 @@ void UAVController::visionThreadFunction() {
     int fpsFrameCount = 0;
     double currentFps = 0.0;
     
+    // Quaternion debugging variables
+    auto lastQuaternionPrintTime = std::chrono::steady_clock::now();
+    const auto quaternionPrintInterval = std::chrono::seconds(2); // Print every 2 seconds
+    
     cv::Mat frame;
     ArucoInputFrame inputFrame;
     int frameCount = 0;
@@ -346,6 +350,59 @@ void UAVController::visionThreadFunction() {
                                    frameCount,
                                    result.processingTimeMs,
                                    result.fps);
+            }
+        }
+        
+        // Read and debug quaternion data from MAVLink
+        if (mavlinkModule) {
+            float q1, q2, q3, q4;
+            auto currentTime = std::chrono::steady_clock::now();
+            
+            if (mavlinkModule->getAttitudeQuaternion(q1, q2, q3, q4)) {
+                // Log quaternion data for detailed analysis
+                UAV::logger().Write("QUAT", "TimeUs,Q1,Q2,Q3,Q4,Timestamp", "Qfffff",
+                                   UAV::logger().getMicroseconds(),
+                                   q1, q2, q3, q4,
+                                   static_cast<float>(mavlinkModule->getQuaternionTimestamp()));
+                
+                // Debug print quaternion periodically
+                if (currentTime - lastQuaternionPrintTime >= quaternionPrintInterval) {
+                    std::cout << "[VISION] Attitude Quaternion: "
+                              << "w=" << std::fixed << std::setprecision(4) << q1 << " "
+                              << "x=" << std::fixed << std::setprecision(4) << q2 << " "
+                              << "y=" << std::fixed << std::setprecision(4) << q3 << " "
+                              << "z=" << std::fixed << std::setprecision(4) << q4
+                              << " (timestamp: " << mavlinkModule->getQuaternionTimestamp() << ")"
+                              << std::endl;
+                    lastQuaternionPrintTime = currentTime;
+                }
+                
+                // Update visualization with quaternion data if enabled
+                if (httpVisualizationEnabled) {
+                    // These will be available in the web interface
+                    VisualizationData quatVizUpdate;
+                    quatVizUpdate.setStatus("Quat_W", q1);
+                    quatVizUpdate.setStatus("Quat_X", q2);
+                    quatVizUpdate.setStatus("Quat_Y", q3);
+                    quatVizUpdate.setStatus("Quat_Z", q4);
+                    quatVizUpdate.setStatus("Quat_Valid", true);
+                    quatVizUpdate.timestamp = currentTime;
+                    vizData.update(quatVizUpdate);
+                }
+            } else {
+                // Debug print when no valid quaternion data
+                if (currentTime - lastQuaternionPrintTime >= quaternionPrintInterval) {
+                    std::cout << "[VISION] No valid attitude quaternion data available" << std::endl;
+                    lastQuaternionPrintTime = currentTime;
+                }
+                
+                // Update visualization to show invalid data
+                if (httpVisualizationEnabled) {
+                    VisualizationData quatVizUpdate;
+                    quatVizUpdate.setStatus("Quat_Valid", false);
+                    quatVizUpdate.timestamp = currentTime;
+                    vizData.update(quatVizUpdate);
+                }
             }
         }
         
