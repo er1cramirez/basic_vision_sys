@@ -6,6 +6,7 @@
 #include "mavlink_comm_module.h"
 #include "Logger.h"
 #include <iostream>
+#include <iomanip>
 #include <cmath>
 #include <map>
 #include <thread>
@@ -74,17 +75,9 @@ bool MavlinkCommModule::start() {
         
         std::cout << "MAVLink communication started successfully" << std::endl;
         
-        // Debug: Check if we're about to request quaternion
-        std::cout << "About to request ATTITUDE_QUATERNION messages..." << std::endl;
-        
-        // Wait a moment for connection to stabilize, then request ATTITUDE_QUATERNION
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << "Finished waiting, now calling requestAttitudeQuaternion..." << std::endl;
-        
-        requestAttitudeQuaternion(100);  // Request at 10ms interval (100Hz)
-
-        
-        std::cout << "Finished calling requestAttitudeQuaternion" << std::endl;
+        // Note: Quaternion message frequency should be set externally via Python script
+        // Use: python3 tools/msg_setup.py <frequency_hz> to configure ATTITUDE_QUATERNION rate
+        // This avoids conflicts and allows proper frequency control
         
         return true;
         
@@ -260,54 +253,7 @@ void MavlinkCommModule::receiveThreadFunc() {
             
             static int total_msg_count = 0;
             total_msg_count++;
-            
-            // // Print summary every 500 messages
-            // if (total_msg_count % 500 == 0) {
-            //     std::cout << "=== MAVLink Message Summary (total: " << total_msg_count << ") ===" << std::endl;
-            //     for (const auto& [msg_id, count] : msg_id_counts) {
-            //         std::cout << "  Message ID " << msg_id << ": " << count << " times" << std::endl;
-            //     }
-            //     std::cout << "======================================" << std::endl;
-            // }
-            
-            // Handle specific message types
             switch (message.msgid) {
-                case MAVLINK_MSG_ID_ATTITUDE_QUATERNION: {
-                    // std::cout << ">>> Processing ATTITUDE_QUATERNION message (ID: " << message.msgid << ")" << std::endl;
-                    mavlink_attitude_quaternion_t att_quat;
-                    mavlink_msg_attitude_quaternion_decode(&message, &att_quat);
-                    
-                    // Store quaternion data with thread safety
-                    {
-                        std::lock_guard<std::mutex> lock(quaternion_mutex_);
-                        q1_ = att_quat.q1;  // w component (real part)
-                        q2_ = att_quat.q2;  // x component
-                        q3_ = att_quat.q3;  // y component
-                        q4_ = att_quat.q4;  // z component
-                        quaternion_timestamp_ = att_quat.time_boot_ms * 1000; // Convert to microseconds
-                        quaternion_valid_ = true;
-                    }
-                    // Log the received quaternion for debugging
-                    UAV::logger().Write("ATTQ", "TimeUs,QuatW,QuatX,QuatY,QuatZ", "Qffff",
-                                       UAV::logger().getMicroseconds(),
-                                       q1_, q2_, q3_, q4_);
-                    // std::cout << ">>> Stored quaternion: w=" << att_quat.q1 
-                    //           << " x=" << att_quat.q2 
-                    //           << " y=" << att_quat.q3 
-                    //           << " z=" << att_quat.q4 << std::endl;
-                    break;
-                }
-                // case MAVLINK_MSG_ID_ATTITUDE: {
-                //     std::cout << ">>> Processing ATTITUDE message (ID: " << message.msgid << ")" << std::endl;
-                //     // We're not converting attitude to quaternion anymore
-                //     // Just log that we received it for debugging
-                //     mavlink_attitude_t att;
-                //     mavlink_msg_attitude_decode(&message, &att);
-                //     std::cout << ">>> Received ATTITUDE: roll=" << att.roll 
-                //               << " pitch=" << att.pitch 
-                //               << " yaw=" << att.yaw << std::endl;
-                //     break;
-                // }
                 default:
                     // Log unhandled message types occasionally for debugging
                     if (msg_id_counts[message.msgid] == 1) {
@@ -336,73 +282,8 @@ void MavlinkCommModule::receiveThreadFunc() {
     std::cout << "Receive thread stopped" << std::endl;
 }
 
-// Get attitude quaternion
-bool MavlinkCommModule::getAttitudeQuaternion(float& q1, float& q2, float& q3, float& q4) const {
-    std::lock_guard<std::mutex> lock(quaternion_mutex_);
-    if (quaternion_valid_) {
-        q1 = q1_;
-        q2 = q2_;
-        q3 = q3_;
-        q4 = q4_;
-        return true;
-    }
-    return false;
-}
+// NOTE: All quaternion/attitude methods removed - now handled exclusively by SimpleQuaternionReader
 
-// Request ATTITUDE_QUATERNION messages from the vehicle
-bool MavlinkCommModule::requestAttitudeQuaternion(uint32_t interval_us) {
-    std::cout << "=== requestAttitudeQuaternion() called ===" << std::endl;
-    std::cout << "Requesting ATTITUDE_QUATERNION messages with interval " << interval_us << " microseconds" << std::endl;
-    
-    // Debug port status
-    std::cout << "Port status: port_=" << (port_ ? "valid" : "null") 
-              << ", is_running=" << (port_ && port_->is_running() ? "true" : "false") << std::endl;
-    
-    // Create MAV_CMD_SET_MESSAGE_INTERVAL command
-    mavlink_message_t msg;
-    mavlink_command_long_t cmd = {};
-    
-    cmd.target_system = target_system_id_;
-    cmd.target_component = target_component_id_;
-    cmd.command = MAV_CMD_SET_MESSAGE_INTERVAL;  // Command ID 511
-    cmd.confirmation = 0;
-    cmd.param1 = 31;  // ATTITUDE_QUATERNION message ID
-    cmd.param2 = interval_us;  // Interval in microseconds
-    cmd.param3 = 0;
-    cmd.param4 = 0;
-    cmd.param5 = 0;
-    cmd.param6 = 0;
-    cmd.param7 = 0;
-    
-    std::cout << "Command details: target_sys=" << (int)cmd.target_system 
-              << ", target_comp=" << (int)cmd.target_component 
-              << ", command=" << cmd.command 
-              << ", param1=" << cmd.param1 
-              << ", param2=" << cmd.param2 << std::endl;
-    
-    // Encode the message
-    mavlink_msg_command_long_encode(system_id_, component_id_, &msg, &cmd);
-    
-    std::cout << "Message encoded, attempting to send..." << std::endl;
-    
-    // Send the message
-    if (port_ && port_->is_running()) {
-        int result = port_->write_message(msg);
-        if (result > 0) {
-            std::cout << "Successfully sent ATTITUDE_QUATERNION request" << std::endl;
-            return true;
-        } else {
-            std::cerr << "Failed to send ATTITUDE_QUATERNION request" << std::endl;
-            return false;
-        }
-    } else {
-        std::cerr << "Cannot send ATTITUDE_QUATERNION request: port not running" << std::endl;
-        return false;
-    }
-}
+// NOTE: All quaternion/attitude methods removed - now handled exclusively by SimpleQuaternionReader
 
-// Get quaternion timestamp
-uint64_t MavlinkCommModule::getQuaternionTimestamp() const {
-    std::lock_guard<std::mutex> lock(quaternion_mutex_);
-    return quaternion_timestamp_;
-}
+// NOTE: processAttitudeMessage removed - quaternion processing now handled by SimpleQuaternionReader

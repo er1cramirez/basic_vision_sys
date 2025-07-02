@@ -8,6 +8,7 @@
 #include "Logger.h"
 #include "ImageSourceInterface.h"
 #include "mavlink_comm_module.h"
+#include "SimpleQuaternionReader.h"
 #include "GenericDebugVisualizer.h" 
 #include "VisualizationData.h"
 
@@ -109,6 +110,7 @@ private:
     
     // System components
     std::unique_ptr<MavlinkCommModule> mavlinkModule;
+    std::unique_ptr<SimpleQuaternionReader> quaternionReader;  // NEW: Simple quaternion reader
     std::unique_ptr<GenericDebugVisualizer> debugVisualizer;
     ImageSourcePtr imageSource;
     ArucoPosePipeline arucoProcessor;

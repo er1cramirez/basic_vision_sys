@@ -59,6 +59,7 @@ set(MAV_COM_SOURCES
     src/mavcomm/mavlink_comm_module.cpp
     src/mavcomm/serial_port.cpp
     src/mavcomm/udp_port.cpp
+    src/mavcomm/SimpleQuaternionReader.cpp
 )
 
 set(VISION_CORE_SOURCES
@@ -139,6 +140,14 @@ target_link_libraries(test_telemetry
     ${OPENSSL_LIBRARIES}
     Eigen3::Eigen
 )
+
+# Test for Simple Quaternion Reader
+add_executable(test_simple_quaternion 
+    test_simple_quaternion.cpp
+    src/mavcomm/SimpleQuaternionReader.cpp
+    ${LOGGER_SOURCES}
+)
+target_link_libraries(test_simple_quaternion ${OpenCV_LIBS} ${CMAKE_THREAD_LIBS_INIT} OpenSSL::SSL OpenSSL::Crypto)
 
 # Create logs directory if it doesn't exist
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/logs)

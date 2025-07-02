@@ -22,6 +22,52 @@
 #include <functional>
 #include <vector>
 #include <string>
+#include <cmath>
+
+/**
+ * @struct AttitudeData
+ * @brief Structure to hold attitude quaternion data with timestamp and derived values
+ */
+struct AttitudeData {
+    // Quaternion components (w, x, y, z)
+    float q1 = 1.0f;  // w component (real part)
+    float q2 = 0.0f;  // x component
+    float q3 = 0.0f;  // y component
+    float q4 = 0.0f;  // z component
+    
+    // Timestamp information
+    uint64_t timestamp_us = 0;     // Message timestamp in microseconds
+    uint64_t received_time_us = 0; // Time when message was received
+    
+    // Validity and statistics
+    bool valid = false;
+    double frequency_hz = 0.0;
+    size_t message_count = 0;
+    
+    // Derived Euler angles (computed automatically)
+    float roll_deg = 0.0f;
+    float pitch_deg = 0.0f;
+    float yaw_deg = 0.0f;
+    
+    /**
+     * @brief Update Euler angles from quaternion
+     */
+    void updateEulerAngles() {
+        // Convert quaternion to Euler angles (ZYX convention)
+        roll_deg = atan2(2*(q1*q2 + q3*q4), 1 - 2*(q2*q2 + q3*q3)) * 180.0f / M_PI;
+        pitch_deg = asin(std::max(-1.0f, std::min(1.0f, 2*(q1*q3 - q4*q2)))) * 180.0f / M_PI;
+        yaw_deg = atan2(2*(q1*q4 + q2*q3), 1 - 2*(q3*q3 + q4*q4)) * 180.0f / M_PI;
+    }
+    
+    /**
+     * @brief Get age of the data in milliseconds
+     */
+    double getAgeMs() const {
+        auto now = std::chrono::steady_clock::now();
+        auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+        return (now_us - received_time_us) / 1000.0;
+    }
+};
 
 /**
  * @class MavlinkCommModule
@@ -117,28 +163,7 @@ public:
      */
     void registerMessageCallback(std::function<void(const mavlink_message_t&)> callback);
     
-    /**
-     * @brief Request ATTITUDE_QUATERNION messages from the vehicle
-     * @param interval_us Interval between messages in microseconds (default: 100000 = 10Hz)
-     * @return True if request was sent successfully
-     */
-    bool requestAttitudeQuaternion(uint32_t interval_us = 100000);
-    
-    /**
-     * @brief Get the latest attitude quaternion data
-     * @param q1 Quaternion component 1 (w)
-     * @param q2 Quaternion component 2 (x)
-     * @param q3 Quaternion component 3 (y)
-     * @param q4 Quaternion component 4 (z)
-     * @return True if valid quaternion data is available
-     */
-    bool getAttitudeQuaternion(float& q1, float& q2, float& q3, float& q4) const;
-    
-    /**
-     * @brief Get the latest attitude quaternion timestamp
-     * @return Timestamp in microseconds since Unix epoch
-     */
-    uint64_t getQuaternionTimestamp() const;
+    // NOTE: Quaternion/attitude methods removed - now handled by SimpleQuaternionReader
     
 private:
     // Communication parameters
@@ -159,14 +184,7 @@ private:
     float force_derivative_z_ = 0.0f;
     uint64_t msg_seq_ = 0;
     
-    // Attitude quaternion data
-    mutable std::mutex quaternion_mutex_;
-    float q1_ = 1.0f;  // w component (real part)
-    float q2_ = 0.0f;  // x component
-    float q3_ = 0.0f;  // y component  
-    float q4_ = 0.0f;  // z component
-    uint64_t quaternion_timestamp_ = 0;
-    bool quaternion_valid_ = false;
+    // NOTE: Quaternion data members removed - now handled by SimpleQuaternionReader
     
     // Thread control
     std::atomic<bool> running_{false};
@@ -191,6 +209,8 @@ private:
     
     // Compose a FORCE_VECTOR_TARGET message
     mavlink_message_t composeForceVectorMessage();
+    
+    // NOTE: processAttitudeMessage removed - quaternion processing now handled by SimpleQuaternionReader
 };
 
 #endif // MAVLINK_COMM_MODULE_H
