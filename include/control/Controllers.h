@@ -90,8 +90,9 @@ public:
     ControlOutput computeControl(const EKFStateResult& state, const Eigen::Vector3d& target) {
         ControlOutput output;
 
-        double cr = 0.1; // Radial velocity gain
+        double cr = 0.2; // Radial velocity gain
         double ct = 0.0; // Tangential velocity gain
+        double s = 1.5; // Slope of the velocity regulator
 
         // Simplified version of planning equations(No height dependence)
         // Vectorial distance to target
@@ -128,9 +129,9 @@ public:
         Eigen::Vector3d _T = Eigen::Vector3d(0, 0, 1);
 
         // Radial velocity regulator mu_r = tanh(d)
-        double mu_r = std::tanh(d);
+        double mu_r = std::tanh(s * d);
         // Tangential velocity regulator mu_t = sech(d)
-        double mu_t = 1 / std::cosh(d);
+        double mu_t = 1 / std::cosh(s * d);
 
         // Calculate derivatives of the velocity regulators
         // d/dt(mu_r) = d/dt(tanh(d)) = sech²(d) * d_dot
@@ -155,7 +156,7 @@ public:
         Eigen::Vector3d error_dot = state.acceleration - v_desired_dot;  // assuming you have acceleration in state
 
         // Control and its derivative
-        double kp = -0.017;
+        double kp = -0.01;
         output.u_desired = error * kp;
         output.u_desired_dot = error_dot * kp;
 

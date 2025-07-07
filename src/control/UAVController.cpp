@@ -310,7 +310,7 @@ void UAVController::visionThreadFunction() {
         // Get attitude data at the beginning of each loop iteration
         AttitudeData attitudeData;
         bool hasAttitudeData = false;
-        bool transformApplied = false;
+        bool transformApplied = true;
         
         if (imageSource->getNextFrame(frame)) {
             if (!frame.empty()) {
