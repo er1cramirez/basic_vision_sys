@@ -94,10 +94,6 @@ set(VISUALIZATION_SOURCES
 # Add telemetry sources (simplified version only)
 set(TELEMETRY_SOURCES
     src/SimpleTelemetry.cpp
-    # Commenting out complex telemetry for now due to build issues
-    # src/telemetry/TelemetryEntry.cpp
-    # src/telemetry/TelemetryPublisher.cpp
-    # tools/example_scope/udp_telemetry_server.cpp
 )
 
 # Create UAV Controller test executable

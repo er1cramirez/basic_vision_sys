@@ -9,3 +9,9 @@
 
 /world/iris_runway_aruco/model/iris_with_fixed_camera/model/camera/link/camera_link/sensor/camera/camera_info
 /world/iris_runway_aruco/model/iris_with_fixed_camera/model/camera/link/camera_link/sensor/camera/image
+
+
+
+Agregar salida mavproxy
+1. **Setup MAVProxy output**: `output add 127.0.0.1:14552`
+2. **Enable messages**: `python3 msg_setup.py 50`

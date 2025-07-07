@@ -82,7 +82,7 @@ def enable_quaternion_messages(connection_string='udp:127.0.0.1:14550', rate_hz=
         return False
 
 def main():
-    rate_hz = 50
+    rate_hz = 60
     
     if len(sys.argv) > 1:
         rate_hz = int(sys.argv[1])

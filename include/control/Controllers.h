@@ -155,10 +155,15 @@ public:
         Eigen::Vector3d error_dot = state.acceleration - v_desired_dot;  // assuming you have acceleration in state
 
         // Control and its derivative
-        double kp = -0.02;
+        double kp = -0.017;
         output.u_desired = error * kp;
         output.u_desired_dot = error_dot * kp;
-        
+
+        UAV::logger().Write("CPRM", "TimeUS,Verrx,Verry,Verrz,Ux,Uy,Uz",
+                           "Qffffff", output.timestamp,
+                           error.x(), error.y(), error.z(),
+                           output.u_desired.x(), output.u_desired.y(), output.u_desired.z());
+
         return output;
     }
 };
