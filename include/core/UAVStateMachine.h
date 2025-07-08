@@ -100,6 +100,7 @@ private:
     // Controllers
     std::unique_ptr<PositionController> positionController;
     std::unique_ptr<VelocityController> velocityController;
+    std::unique_ptr<VelocityPIController> velocityPIController;
     
     // Targets
     Eigen::Vector3d positionTarget;

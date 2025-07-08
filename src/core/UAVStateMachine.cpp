@@ -10,7 +10,8 @@ UAVStateMachine::UAVStateMachine(LatestData<EKFStateResult>& stateEstimate,
     
     // Initialize controllers
     // positionController = std::make_unique<PositionController>();
-    velocityController = std::make_unique<VelocityController>();
+    // velocityController = std::make_unique<VelocityController>();
+    velocityPIController = std::make_unique<VelocityPIController>();
 
     
     // Initialize targets
@@ -33,7 +34,10 @@ bool UAVStateMachine::initialize() {
     // if (!positionController->initialize()) {
     //     return false;
     // }
-    if (!velocityController->initialize()) {
+    // if (!velocityController->initialize()) {
+    //     return false;
+    // }
+    if (!velocityPIController->initialize()) {
         return false;
     }
     
@@ -127,12 +131,14 @@ ControlOutput UAVStateMachine::computeControlOutput(const EKFStateResult& state)
     switch (currentMode) {
         case ControlMode::POSITION_HOLD:
             // control = positionController->computeControl(state, positionTarget);
-            control = velocityController->computeControl(state, positionTarget);
+            // control = velocityController->computeControl(state, positionTarget);
+            control = velocityPIController->computeControl(state, positionTarget);
             break;
         default:
             // Default to position hold
             // control = positionController->computeControl(state, positionTarget);
-            control = velocityController->computeControl(state, positionTarget);
+            // control = velocityController->computeControl(state, positionTarget);
+            control = velocityPIController->computeControl(state, positionTarget);
             break;
     }
     return control;
