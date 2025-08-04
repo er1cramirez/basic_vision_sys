@@ -7,6 +7,7 @@
 #include "Logger.h"
 #include <chrono>
 #include <cmath>
+#include <utility>
 
 /**
  * @struct DesiredVelocityResult
@@ -28,22 +29,28 @@ struct DesiredVelocityResult {
  */
 inline DesiredVelocityResult computeDesiredVelocity(const EKFStateResult& state, 
                                                    const Eigen::Vector3d& target,
-                                                   double cr = 0.2, 
-                                                   double kt = 0.0, 
-                                                   double kz = 0.1,
-                                                   double s_min = 1.5,
-                                                   double s_max = 2.0) {
+                                                   double cr = 0.8, 
+                                                   double kt = 0.5, 
+                                                   double kz = 2.0,
+                                                   double s_min = 2.5,
+                                                   double s_max = 4.0) {
     DesiredVelocityResult result;
     
     // Simplified version of planning equations(No height dependence)
     // Positive height
-    double h = state.position.z();
+    double h = state.position.z() - 0.75; //Z offset
     // Height velocity gain: 0 when near to the ground
     // ct = c1 * tanh(c2 * h)
     double ct = kt * std::tanh(kz * h);
+    // Derivative of ct with respect to time
+    // ct_dot = c1 * c2 * sech²(c2 * h) * h_dot
+    double ct_dot = kt * kz * (1.0 - std::tanh(kz * h) * std::tanh(kz * h)) * state.velocity.z();
     // Height dependence for slope factor
     // s = s_min + s_max * exp(-kz * h)
     double s = s_min + s_max * std::exp(-kz * h);
+    // Derivative of s with respect to time
+    // s_dot = -s_max * kz * exp(-kz * h) * state.velocity.z();
+    double s_dot = -s_max * kz * std::exp(-kz * h) * state.velocity.z();
     // Vectorial distance to target
     Eigen::Vector3d d_vector = -state.position;
     // discard the z component
@@ -74,7 +81,7 @@ inline DesiredVelocityResult computeDesiredVelocity(const EKFStateResult& state,
     Eigen::Vector3d R_dot = (d_vector_dot - _R * d_dot) / d;
 
     // Tangential unity vector (z axis)
-    Eigen::Vector3d _T = Eigen::Vector3d(0, 0, 1);
+    Eigen::Vector3d _T = Eigen::Vector3d(0, 0, -1);
 
     // Radial velocity regulator mu_r = tanh(d)
     double mu_r = std::tanh(s * d);
@@ -82,22 +89,31 @@ inline DesiredVelocityResult computeDesiredVelocity(const EKFStateResult& state,
     double mu_t = 1 / std::cosh(s * d);
 
     // Calculate derivatives of the velocity regulators
-    // d/dt(mu_r) = d/dt(tanh(d)) = sech²(d) * d_dot
-    double mu_r_dot = (1 - mu_r * mu_r) * d_dot;  // since sech²(d) = 1 - tanh²(d)
+    // d/dt(mu_r) = d/dt(tanh(s*d)) = sech²(s*d) * (s_dot*d + s*d_dot)
+    double mu_r_dot = (1 - mu_r * mu_r) * (s_dot * d + s * d_dot);  // since sech²(s*d) = 1 - tanh²(s*d)
 
-    // d/dt(mu_t) = d/dt(sech(d)) = -sech(d) * tanh(d) * d_dot
-    double mu_t_dot = -mu_t * mu_r * d_dot;
+    // d/dt(mu_t) = d/dt(sech(s*d)) = -sech(s*d) * tanh(s*d) * (s_dot*d + s*d_dot)
+    double mu_t_dot = -mu_t * mu_r * (s_dot * d + s * d_dot);
 
     // Desired velocity vector
     result.v_desired = mu_r * cr * _R + mu_t * ct * _T;
 
     // Calculate v_desired_dot
     // d/dt(v_desired) = d/dt(mu_r * cr * _R + mu_t * ct * _T)
-    //                 = mu_r_dot * cr * _R + mu_r * cr * R_dot + mu_t_dot * ct * _T
+    //                 = mu_r_dot * cr * _R + mu_r * cr * R_dot + mu_t_dot * ct * _T + mu_t * ct_dot * _T
+    // Note: cr is constant, but ct is height-dependent, so we need ct_dot term
     result.v_desired_dot = mu_r_dot * cr * _R + 
                           mu_r * cr * R_dot + 
-                          mu_t_dot * ct * _T;
+                          mu_t_dot * ct * _T + 
+                          mu_t * ct_dot * _T;
     // Note: _T is constant, so its derivative is zero
+    UAV::logger().Write("CVDS",
+                        "TimeUS,VdX,VdY,VdZ",
+                        "Qfff",
+                        UAV::logger().getMicroseconds(),
+                        result.v_desired.x(),
+                        result.v_desired.y(),
+                        result.v_desired.z());
     
     return result;
 }
@@ -224,18 +240,22 @@ private:
     // Delay mechanism
     std::chrono::steady_clock::time_point start_time;
     std::chrono::steady_clock::time_point last_update_time;
-    double delay_time; // Delay in seconds before integral term starts accumulating
-    bool integral_active;
+    double delay_time; // Delay in seconds before integral term starts accumulating (for X and Y axes)
+    Eigen::Vector3i integral_active; // Per-axis integral activation (0=inactive, 1=active)
     
-    // Controller gains
-    double kp;
-    double ki;
+    // Controller gains (per axis)
+    Eigen::Vector3d kp;
+    Eigen::Vector3d ki;
     
 public:
-    VelocityPIController(double proportional_gain = -0.01, double integral_gain = -0.005, double integral_delay = 2.0) 
-        : kp(proportional_gain), ki(integral_gain), delay_time(integral_delay), integral_active(false), has_previous_error(false) {
+    VelocityPIController(const Eigen::Vector3d& proportional_gain = Eigen::Vector3d(-0.01, -0.01, 0.1), 
+                        const Eigen::Vector3d& integral_gain = Eigen::Vector3d(-0.001, -0.001, 0.0), 
+                        double integral_delay = 3.0) 
+        : kp(proportional_gain), ki(integral_gain), delay_time(integral_delay), has_previous_error(false) {
         integral_error = Eigen::Vector3d::Zero();
         previous_error = Eigen::Vector3d::Zero();
+        // Z-axis integral is active from start, X and Y axes start inactive
+        integral_active = Eigen::Vector3i(0, 0, 1); // [x_inactive, y_inactive, z_active]
         start_time = std::chrono::steady_clock::now();
         last_update_time = start_time;
     }
@@ -252,27 +272,57 @@ public:
         integral_error = Eigen::Vector3d::Zero();
         previous_error = Eigen::Vector3d::Zero();
         has_previous_error = false;
-        integral_active = false;
+        // Z-axis integral is active from start, X and Y axes start inactive
+        integral_active = Eigen::Vector3i(0, 0, 1); // [x_inactive, y_inactive, z_active]
         start_time = std::chrono::steady_clock::now();
         last_update_time = start_time;
     }
     
     /**
-     * @brief Set controller gains
-     * @param proportional_gain Proportional gain
-     * @param integral_gain Integral gain
+     * @brief Set controller gains for all axes
+     * @param proportional_gain Proportional gains [kp_x, kp_y, kp_z]
+     * @param integral_gain Integral gains [ki_x, ki_y, ki_z]
      */
-    void setGains(double proportional_gain, double integral_gain) {
+    void setGains(const Eigen::Vector3d& proportional_gain, const Eigen::Vector3d& integral_gain) {
         kp = proportional_gain;
         ki = integral_gain;
     }
     
     /**
+     * @brief Set controller gains for individual axis
+     * @param axis Axis index (0=x, 1=y, 2=z)
+     * @param proportional_gain Proportional gain for specified axis
+     * @param integral_gain Integral gain for specified axis
+     */
+    void setAxisGains(int axis, double proportional_gain, double integral_gain) {
+        if (axis >= 0 && axis < 3) {
+            kp[axis] = proportional_gain;
+            ki[axis] = integral_gain;
+        }
+    }
+    
+    /**
+     * @brief Get current controller gains
+     * @return Pair of (kp, ki) vectors
+     */
+    std::pair<Eigen::Vector3d, Eigen::Vector3d> getGains() const {
+        return std::make_pair(kp, ki);
+    }
+    
+    /**
      * @brief Set integral delay time
-     * @param delay Delay in seconds
+     * @param delay Delay in seconds for X and Y axes (Z-axis is always active)
      */
     void setIntegralDelay(double delay) {
         delay_time = delay;
+    }
+    
+    /**
+     * @brief Get integral activation status per axis
+     * @return Vector indicating which axes have active integral terms [x, y, z]
+     */
+    Eigen::Vector3i getIntegralStatus() const {
+        return integral_active;
     }
     
     /**
@@ -287,21 +337,32 @@ public:
         auto current_time = std::chrono::steady_clock::now();
         double dt = std::chrono::duration<double>(current_time - last_update_time).count();
         
-        // Check if enough time has passed to activate integral term
+        // Check if enough time has passed to activate integral term for X and Y axes
         double elapsed_time = std::chrono::duration<double>(current_time - start_time).count();
-        if (!integral_active && elapsed_time >= delay_time) {
-            integral_active = true;
+        if (elapsed_time >= delay_time) {
+            integral_active[0] = 1; // Activate X-axis integral
+            integral_active[1] = 1; // Activate Y-axis integral
+            // Z-axis is already active from start (integral_active[2] = 1)
         }
 
         // Calculate desired velocity and its derivative
         DesiredVelocityResult desired = computeDesiredVelocity(state, target);
         
-        // Calculate velocity error and its derivative
+        // Calculate velocity error and its derivative PER AXIS for debugging
         Eigen::Vector3d error = state.velocity - desired.v_desired;
-        Eigen::Vector3d error_dot = state.acceleration - desired.v_desired_dot;  // assuming you have acceleration in state
+        Eigen::Vector3d error_dot = state.acceleration - desired.v_desired_dot;
+        
+        // Debug: Separate calculations by axis
+        double error_x = error.x();
+        double error_y = error.y(); 
+        double error_z = error.z();
+        
+        double error_dot_x = error_dot.x();
+        double error_dot_y = error_dot.y();
+        double error_dot_z = error_dot.z();
 
-        // Update integral term only if delay has passed and dt is reasonable
-        if (integral_active && dt > 0.0 && dt < 0.1) { // Avoid integration if dt is too large (likely first call or long pause)
+        // Update integral term only if dt is reasonable
+        if (dt > 0.0 && dt < 0.1) { // Avoid integration if dt is too large (likely first call or long pause)
             // Fourth-order Runge-Kutta integration for the integral term
             // We're integrating: d(integral_error)/dt = error
             // The derivative function is f(t, integral_error) = error
@@ -330,44 +391,98 @@ public:
                 
                 // RK4 formula: y_{n+1} = y_n + (dt/6) * (k1 + 2*k2 + 2*k3 + k4)
                 Eigen::Vector3d delta_integral = (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4);
-                integral_error += delta_integral;
+                
+                // Apply integration only to active axes - SEPARATED BY AXIS
+                if (integral_active[0]) { // X-axis
+                    integral_error[0] += delta_integral[0];
+                }
+                if (integral_active[1]) { // Y-axis
+                    integral_error[1] += delta_integral[1];
+                }
+                if (integral_active[2]) { // Z-axis
+                    integral_error[2] += delta_integral[2];
+                }
             } else {
                 // First iteration: use simple Euler since we don't have previous error
-                integral_error += error * dt;
+                // Apply integration only to active axes - SEPARATED BY AXIS
+                if (integral_active[0]) { // X-axis
+                    integral_error[0] += error_x * dt;
+                }
+                if (integral_active[1]) { // Y-axis
+                    integral_error[1] += error_y * dt;
+                }
+                if (integral_active[2]) { // Z-axis
+                    integral_error[2] += error_z * dt;
+                }
                 has_previous_error = true;
             }
             
             // Store current error for next iteration
             previous_error = error;
             
-            // Anti-windup: limit integral error to prevent excessive accumulation
+            // Anti-windup: limit integral error to prevent excessive accumulation - PER AXIS
             double max_integral = 0.1; // Maximum integral error magnitude
-            for (int i = 0; i < 3; ++i) {
-                if (integral_error[i] > max_integral) {
-                    integral_error[i] = max_integral;
-                } else if (integral_error[i] < -max_integral) {
-                    integral_error[i] = -max_integral;
-                }
+            
+            // X-axis anti-windup
+            if (integral_error[0] > max_integral) {
+                integral_error[0] = max_integral;
+            } else if (integral_error[0] < -max_integral) {
+                integral_error[0] = -max_integral;
+            }
+            
+            // Y-axis anti-windup
+            if (integral_error[1] > max_integral) {
+                integral_error[1] = max_integral;
+            } else if (integral_error[1] < -max_integral) {
+                integral_error[1] = -max_integral;
+            }
+            
+            // Z-axis anti-windup
+            if (integral_error[2] > max_integral) {
+                integral_error[2] = max_integral;
+            } else if (integral_error[2] < -max_integral) {
+                integral_error[2] = -max_integral;
             }
         }
 
-        // PI Control
-        Eigen::Vector3d proportional_term = error * kp;
-        Eigen::Vector3d integral_term = integral_error * ki;
+        // PI Control - SEPARATED BY AXIS for debugging
+        // X-axis control
+        double proportional_term_x = error_x * kp.x();
+        double integral_term_x = integral_error.x() * ki.x();
+        double u_desired_x = proportional_term_x + integral_term_x;
+        double u_desired_dot_x = error_dot_x * kp.x() + error_x * ki.x();
         
-        output.u_desired = proportional_term + integral_term;
-        // Correct derivative: u_dot = kp * error_dot + ki * error
-        // Since d/dt(integral_error) = error
-        output.u_desired_dot = error_dot * kp + error * ki;
+        // Y-axis control
+        double proportional_term_y = error_y * kp.y();
+        double integral_term_y = integral_error.y() * ki.y();
+        double u_desired_y = proportional_term_y + integral_term_y;
+        double u_desired_dot_y = error_dot_y * kp.y() + error_y * ki.y();
+        
+        // Z-axis control
+        double proportional_term_z = error_z * kp.z();
+        double integral_term_z = integral_error.z() * ki.z();
+        double u_desired_z = proportional_term_z + integral_term_z;
+        double u_desired_dot_z = error_dot_z * kp.z() + error_z * ki.z();
+        
+        // Assemble final output
+        output.u_desired = Eigen::Vector3d(u_desired_x, u_desired_y, u_desired_z);
+        output.u_desired_dot = Eigen::Vector3d(u_desired_dot_x, u_desired_dot_y, u_desired_dot_z);
 
         // Update timestamp
         last_update_time = current_time;
+        // Control performance by axis
+        UAV::logger().Write("CPRZ", "TimeUS,Vd_z,V_z,Verr_z,Uz",
+                           "Qffff", UAV::logger().getMicroseconds(),
+                           desired.v_desired.z(), state.velocity.z(), error_z, output.u_desired.z());
 
-        UAV::logger().Write("CPRM", "TimeUS,Verrx,Verry,Verrz,Ierrx,Ierry,Ierrz,Ux,Uy,Uz",
-                           "Qfffffffff", output.timestamp,
-                           error.x(), error.y(), error.z(),
+        // Enhanced logging with per-axis breakdown for debugging
+        UAV::logger().Write("CPRM", "TimeUS,Verrx,Verry,Verrz,Ierrx,Ierry,Ierrz,Ux,Uy,Uz,Px,Py,Pz,Ix,Iy,Iz",
+                           "Qfffffffffffffff", output.timestamp,
+                           error_x, error_y, error_z,
                            integral_error.x(), integral_error.y(), integral_error.z(),
-                           output.u_desired.x(), output.u_desired.y(), output.u_desired.z());
+                           u_desired_x, u_desired_y, u_desired_z,
+                           proportional_term_x, proportional_term_y, proportional_term_z,
+                           integral_term_x, integral_term_y, integral_term_z);
 
         return output;
     }
