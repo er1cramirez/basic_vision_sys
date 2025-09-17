@@ -12,7 +12,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Option to enable/disable Gazebo support
-option(WITH_GAZEBO "Build with Gazebo support" OFF)
+option(WITH_GAZEBO "Build with Gazebo support" ON)
 
 # Define a preprocessor macro to indicate Gazebo availability
 if(WITH_GAZEBO)
@@ -27,10 +27,9 @@ if(WITH_GAZEBO)
 endif()
 
 # MAVLink setup
-set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/eric)
-include_directories(${MAVLINK_INCLUDE_DIR})
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/out)
+# include()
 add_compile_options(-Wno-address-of-packed-member)
-
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -44,6 +43,7 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include/telemetry      # Add telemetry include
     ${OpenCV_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
+    ${MAVLINK_INCLUDE_DIR}
 )
 
 # Add Gazebo include directories only if enabled
