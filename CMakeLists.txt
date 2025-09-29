@@ -12,7 +12,7 @@ find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Option to enable/disable Gazebo support
-option(WITH_GAZEBO "Build with Gazebo support" OFF)
+option(WITH_GAZEBO "Build with Gazebo support" ON)
 
 # Define a preprocessor macro to indicate Gazebo availability
 if(WITH_GAZEBO)
@@ -27,7 +27,7 @@ if(WITH_GAZEBO)
 endif()
 
 # MAVLink setup
-set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/eric)
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/out)
 include_directories(${MAVLINK_INCLUDE_DIR})
 add_compile_options(-Wno-address-of-packed-member)
 

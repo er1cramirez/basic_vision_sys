@@ -248,7 +248,7 @@ private:
     Eigen::Vector3d ki;
     
 public:
-    VelocityPIController(const Eigen::Vector3d& proportional_gain = Eigen::Vector3d(-0.01, -0.01, 0.1), 
+    VelocityPIController(const Eigen::Vector3d& proportional_gain = Eigen::Vector3d(-0.01, -0.01, 0.02), 
                         const Eigen::Vector3d& integral_gain = Eigen::Vector3d(-0.001, -0.001, 0.0), 
                         double integral_delay = 3.0) 
         : kp(proportional_gain), ki(integral_gain), delay_time(integral_delay), has_previous_error(false) {
