@@ -69,6 +69,7 @@ set(VISION_CORE_SOURCES
 # Add Gazebo sources only if enabled
 if(WITH_GAZEBO)
     list(APPEND VISION_CORE_SOURCES src/vision/core/GazeboSource.cpp)
+    list(APPEND VISION_CORE_SOURCES src/vision/core/GzOdometrySource.cpp) 
 endif()
 
 # Add Logger source file

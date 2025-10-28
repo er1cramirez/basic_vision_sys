@@ -29,8 +29,8 @@ namespace UAV_Parameters {
     // Aruco parameters
     const double ARUCO_MARKER_SIZE = 0.5; // Marker size in meters (simulator = 50cm, real = 27cm)    
 
-    const cv::Mat CAM_MAT_SIM = (cv::Mat_<double>(3, 3, CV_64F) << 410.93925476074219, 0.0, 640.0, 
-                                                              0.0, 410.93926429748535, 400.0, 
+    const cv::Mat CAM_MAT_SIM = (cv::Mat_<double>(3, 3, CV_64F) << 935.5208158493042, 0.0, 540.0, 
+                                                              0.0, 935.5208158493042, 540.0, 
                                                               0.0, 0.0, 1.0);
     const cv::Mat DIST_COEF_SIM = (cv::Mat_<double>(1, 5, CV_64F) << 0.0, 0.0, 0.0, 0.0, 0.0);
 

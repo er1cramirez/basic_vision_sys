@@ -339,7 +339,7 @@ void UAVController::visionThreadFunction() {
                 if (hasAttitudeData && transformApplied) {
                     // Create quaternion from attitude data
                     Eigen::Quaterniond droneQuat(attitudeData.q1, attitudeData.q2, attitudeData.q3, attitudeData.q4);
-                    
+                    droneQuat.inverse();
                     // Apply quaternion transformation to position (after camera-to-body transform)
                     result.position = droneQuat * result.position;
                 }

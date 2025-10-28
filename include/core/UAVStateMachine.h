@@ -98,8 +98,6 @@ private:
     LatestData<ControlOutput>& controlOutput;
     
     // Controllers
-    std::unique_ptr<PositionController> positionController;
-    std::unique_ptr<VelocityController> velocityController;
     std::unique_ptr<VelocityPIController> velocityPIController;
     
     // Targets

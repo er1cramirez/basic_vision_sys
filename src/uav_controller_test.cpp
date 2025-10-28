@@ -9,7 +9,9 @@
 
 #include <sys/stat.h>
 #include <signal.h>
-
+#ifdef WITH_GAZEBO
+#include "GzOdometrySource.h"
+#endif
 #ifdef _WIN32
 #include <direct.h>
 #define MKDIR(dir) _mkdir(dir)
@@ -114,7 +116,33 @@ int main(int argc, char** argv) {
         g_controller = nullptr;
         return 1;
     }
-    
+    #ifdef WITH_GAZEBO
+        // Initialize Ground Truth Odometry Source
+        GzOdometrySource::Config odomConfig;
+        // Configuración por defecto ya incluye tus topics:
+        // - droneTopic: "/model/iris_with_fixed_camera/odometry"
+        // - platformTopic: "/model/moving_platform/odometry"
+        // - loggingRate: 50.0 Hz
+        
+        // Si necesitas modificar algún parámetro:
+        // odomConfig.loggingRate = 100.0;  // Para 100 Hz
+        // odomConfig.logRawData = false;   // Para no loggear datos crudos
+        
+        GzOdometrySource odomSource(odomConfig);
+        
+        std::cout << "Initializing Ground Truth Odometry Source..." << std::endl;
+        if (!odomSource.initialize()) {
+            std::cerr << "Warning: Failed to initialize odometry source" << std::endl;
+            std::cerr << "Continuing without ground truth data..." << std::endl;
+        } else {
+            std::cout << "Starting Ground Truth Logging..." << std::endl;
+            if (!odomSource.start()) {
+                std::cerr << "Warning: Failed to start odometry logging" << std::endl;
+            } else {
+                std::cout << "Ground Truth Logging started successfully" << std::endl;
+            }
+        }
+    #endif
     // Print startup information
     std::cout << "\n=== UAV Controller Started ===" << std::endl;
     std::cout << "Mode: " << (enableHttpViz ? "HTTP Visualization" : "Headless") << std::endl;
@@ -206,6 +234,11 @@ int main(int argc, char** argv) {
     // Stop controller
     std::cout << "Stopping controller..." << std::endl;
     controller.stop();
+    #ifdef WITH_GAZEBO
+        // Stop odometry logging
+        std::cout << "Stopping odometry logging..." << std::endl;
+        odomSource.stop();
+    #endif
     
     // Clear global pointer
     g_controller = nullptr;

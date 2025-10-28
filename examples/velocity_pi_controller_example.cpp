@@ -16,12 +16,11 @@ int main() {
     std::cout << "VelocityPIController Example\n";
     std::cout << "============================\n\n";
 
-    // Create the PI controller with custom gains and delay
+    // Create the PI controller with custom gains
     Eigen::Vector3d kp(-0.015, -0.01, -0.008);  // Different gains per axis [x, y, z]
     Eigen::Vector3d ki(-0.008, -0.005, -0.003); // Different integral gains per axis [x, y, z]
-    double delay = 2.0; // 2 seconds delay before integral term activates
     
-    VelocityPIController controller(kp, ki, delay);
+    VelocityPIController controller(kp, ki);
     
     // Initialize the controller
     if (!controller.initialize()) {
@@ -32,17 +31,12 @@ int main() {
     std::cout << "Controller initialized successfully\n";
     std::cout << "Proportional gains: [" << kp.x() << ", " << kp.y() << ", " << kp.z() << "]\n";
     std::cout << "Integral gains: [" << ki.x() << ", " << ki.y() << ", " << ki.z() << "]\n";
-    std::cout << "Integral delay: " << delay << " seconds (X,Y axes only - Z-axis active from start)\n\n";
+    std::cout << "Integral action: Active on all axes from start\n\n";
     
     // Example: Tune individual axis gains during runtime
     std::cout << "Tuning Z-axis gains for better altitude control...\n";
     controller.setAxisGains(2, -0.012, -0.004); // Z-axis (index 2) with different gains
-    
-    // Check initial integral status
-    Eigen::Vector3i integral_status = controller.getIntegralStatus();
-    std::cout << "Initial integral status [x,y,z]: [" 
-              << integral_status[0] << "," << integral_status[1] << "," << integral_status[2] << "]\n";
-    std::cout << "Note: Z-axis integral is active immediately for altitude control\n\n";
+    std::cout << "All axes have integral action active from start\n\n";
     
     // Simulate some control loop iterations
     Eigen::Vector3d target(1.0, 1.0, 0.0); // Target position
