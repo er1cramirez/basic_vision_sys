@@ -27,7 +27,8 @@ if(WITH_GAZEBO)
 endif()
 
 # MAVLink setup
-set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/out)
+# generated/include/mavlink/v2.0
+set(MAVLINK_INCLUDE_DIR $ENV{HOME}/mavlink/generated/include/mavlink/v2.0)
 include_directories(${MAVLINK_INCLUDE_DIR})
 add_compile_options(-Wno-address-of-packed-member)
 
