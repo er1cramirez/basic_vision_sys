@@ -6,36 +6,84 @@ import argparse
 from pathlib import Path
 from datetime import datetime
 
-# Diccionario para nombres descriptivos de archivos
-FILE_TITLES = {
-    
-    # Orientación y posición
-    'QUAT': 'Cuaterniones y Ángulos',
-    'ARUC': 'Detección ArUco(Sin transformación)',
-    'POST': 'Posición del Target(Con transformación)',
-    'CVGA': 'Ganancias de Control Visual',
-    'CVDS': 'Velocidad Deseada',
-    'VCPX': 'Control Velocidad Eje X',
-    'VCPY': 'Control Velocidad Eje Y',
-    'VCPZ': 'Control Velocidad Eje Z',
-    'CPUX': 'Salida Control  X',
-    'CPUY': 'Salida Control  Y',
-    'CPUZ': 'Salida Control  Z',
-    'EKFS': 'Estado EKF',
-    
-}
+# Lista ordenada de archivos a procesar con configuración
+# Formato: (código, título, es_parámetro)
+# - código: Código de 4 letras del archivo (ej: 'QUAT', 'GAIN')
+# - título: Título descriptivo para mostrar
+# - es_parámetro: True = mostrar como texto, False = graficar
+FILES_TO_PROCESS = [
+    # Parámetros y configuración (mostrar como texto)
+    ('VCGA', 'Ganancias Control de Velocidad', True),
+    ('CVGA', 'Parametros del campo de velocidad', True),
 
-# Diccionario para identificar archivos que deben procesarse como texto
-# Estos archivos se mostrarán en formato legible en lugar de gráficas
-PARAM_FILES = {
-    'INIT': True,  # Inicialización tiene texto (nombres de componentes)
-    'PARM': True,  # Parámetros generales
-    'GAIN': True,  # Ganancias de control (PID, etc)
-    'CONF': True,  # Archivos de configuración
-    'VCGA': True,  # Parámetros de ajuste/tuning
-    'CVGA': True,  # Ganancias de control visual (pocos cambios, mejor como texto)
-    # Agrega los códigos de tus archivos de parámetros aquí
-}
+    ('EKFS', 'Estado EKF', False),
+    ('GTPR', 'Posición Relativa(Ground Truth)', False),
+    ('GTVR', 'Velocidad Relativa(Ground Truth)', False),
+    ('CVDS', 'Velocidad Deseada (Campo de velocida)', False),
+    ('VCPX', 'Control Velocidad Eje X', False),
+    ('CPUX', 'Salida Control X', False),
+    ('VCPY', 'Control Velocidad Eje Y', False),
+    ('CPUY', 'Salida Control Y', False),
+    ('VCPZ', 'Control Velocidad Eje Z', False),
+    ('CPUZ', 'Salida Control Z', False),
+    # Datos para graficar (en orden deseado)
+    ('QUAT', 'Cuaterniones y Ángulos', False),
+    ('ARUC', 'Detección ArUco (Sin transformación)', False),
+    ('POST', 'Posición del Target (Con transformación)', False),
+]
+
+# Crear diccionarios auxiliares para compatibilidad
+FILE_TITLES = {code: title for code, title, _ in FILES_TO_PROCESS}
+PARAM_FILES = {code: is_param for code, _, is_param in FILES_TO_PROCESS}
+FILE_ORDER = {code: idx for idx, (code, _, _) in enumerate(FILES_TO_PROCESS)}
+
+# ============================================================================
+# GRÁFICAS DE COMPARACIÓN
+# ============================================================================
+# Permite comparar datos de diferentes archivos en una sola gráfica.
+# Ideal para evaluar rendimiento comparando estimaciones vs ground truth.
+#
+# Estructura de cada entrada:
+# {
+#     'title': 'Título de la gráfica',
+#     'comparisons': [
+#         {
+#             'file1': 'CÓDIGO',      # Código de 4 letras del primer archivo
+#             'field1': 'campo',      # Campo/columna del primer archivo
+#             'file2': 'CÓDIGO',      # Código de 4 letras del segundo archivo
+#             'field2': 'campo',      # Campo/columna del segundo archivo
+#             'label': 'Etiqueta'     # Etiqueta descriptiva para esta comparación
+#         },
+#         # ... más comparaciones
+#     ],
+#     'show_error': True/False,       # Si True, muestra el error en subplot separado
+#     'error_label': 'Etiqueta Error' # Etiqueta para el eje Y del subplot de error
+# }
+#
+# Las gráficas se generan automáticamente y se agregan al dashboard al final.
+# ============================================================================
+COMPARISON_GRAPHS = [
+    {
+        'title': 'Comparación Posición: EKF vs Ground Truth',
+        'comparisons': [
+            {'file1': 'EKFS', 'field1': 'PosX', 'file2': 'GTPR', 'field2': 'Pr_x', 'label': 'Posición X'},
+            {'file1': 'EKFS', 'field1': 'PosY', 'file2': 'GTPR', 'field2': 'Pr_y', 'label': 'Posición Y'},
+            {'file1': 'EKFS', 'field1': 'PosZ', 'file2': 'GTPR', 'field2': 'Pr_z', 'label': 'Posición Z'},
+        ],
+        'show_error': True,  # Mostrar errores en subplot separado
+        'error_label': 'Error Posición [m]'
+    },
+    {
+        'title': 'Comparación Velocidad: EKF vs Ground Truth',
+        'comparisons': [
+            {'file1': 'EKFS', 'field1': 'VelX', 'file2': 'GTVR', 'field2': 'Vr_x', 'label': 'Velocidad X'},
+            {'file1': 'EKFS', 'field1': 'VelY', 'file2': 'GTVR', 'field2': 'Vr_y', 'label': 'Velocidad Y'},
+            {'file1': 'EKFS', 'field1': 'VelZ', 'file2': 'GTVR', 'field2': 'Vr_z', 'label': 'Velocidad Z'},
+        ],
+        'show_error': True,
+        'error_label': 'Error Velocidad [m/s]'
+    },
+]
 
 class SimulationLogProcessor:
     def __init__(self, root_dir, time_offset=0.0, verbose=False):
@@ -332,8 +380,178 @@ class SimulationLogProcessor:
         
         return fig
     
+    def create_comparison_graph(self, comparison_config, available_files, output_dir):
+        """
+        Crea una gráfica de comparación entre múltiples archivos.
+        
+        Args:
+            comparison_config: Diccionario con la configuración de la comparación
+            available_files: Diccionario {código: Path} de archivos disponibles
+            output_dir: Directorio donde guardar la gráfica
+            
+        Returns:
+            Diccionario con info de la gráfica o None si falla
+        """
+        title = comparison_config['title']
+        comparisons = comparison_config['comparisons']
+        show_error = comparison_config.get('show_error', False)
+        error_label = comparison_config.get('error_label', 'Error')
+        
+        if self.verbose:
+            print(f"    [DEBUG] Creando gráfica de comparación: {title}")
+        
+        # Verificar que todos los archivos necesarios existen
+        required_files = set()
+        for comp in comparisons:
+            required_files.add(comp['file1'])
+            required_files.add(comp['file2'])
+        
+        missing_files = required_files - set(available_files.keys())
+        if missing_files:
+            print(f"    ⚠ Archivos faltantes para '{title}': {missing_files}")
+            return None
+        
+        # Cargar todos los DataFrames necesarios
+        dataframes = {}
+        for file_code in required_files:
+            df = self.load_and_process_csv(available_files[file_code])
+            if df is None:
+                print(f"    ⚠ No se pudo cargar {file_code}")
+                return None
+            dataframes[file_code] = df
+        
+        # Crear subplots: uno para las señales, otro para errores (si se solicita)
+        n_rows = 2 if show_error else 1
+        subplot_titles = [title]
+        if show_error:
+            subplot_titles.append(error_label)
+        
+        fig = make_subplots(
+            rows=n_rows, cols=1,
+            subplot_titles=subplot_titles,
+            vertical_spacing=0.12,
+            row_heights=[0.6, 0.4] if show_error else [1.0]
+        )
+        
+        # Procesar cada comparación
+        errors_data = []
+        for comp in comparisons:
+            file1_code = comp['file1']
+            field1 = comp['field1']
+            file2_code = comp['file2']
+            field2 = comp['field2']
+            label = comp['label']
+            
+            df1 = dataframes[file1_code]
+            df2 = dataframes[file2_code]
+            
+            # Verificar que los campos existen
+            if field1 not in df1.columns:
+                print(f"    ⚠ Campo '{field1}' no encontrado en {file1_code}")
+                continue
+            if field2 not in df2.columns:
+                print(f"    ⚠ Campo '{field2}' no encontrado en {file2_code}")
+                continue
+            
+            time_col1 = df1.columns[0]
+            time_col2 = df2.columns[0]
+            
+            # Agregar trazas de las dos señales al primer subplot
+            fig.add_trace(go.Scatter(
+                x=df1[time_col1],
+                y=df1[field1],
+                mode='lines',
+                name=f'{label} ({file1_code})',
+                line=dict(width=2),
+                hovertemplate=f'<b>{label} ({file1_code})</b><br>' +
+                             'Tiempo: %{x:.3f}s<br>' +
+                             'Valor: %{y:.6f}<extra></extra>'
+            ), row=1, col=1)
+            
+            fig.add_trace(go.Scatter(
+                x=df2[time_col2],
+                y=df2[field2],
+                mode='lines',
+                name=f'{label} (GT)',
+                line=dict(width=2, dash='dash'),
+                hovertemplate=f'<b>{label} (Ground Truth)</b><br>' +
+                             'Tiempo: %{x:.3f}s<br>' +
+                             'Valor: %{y:.6f}<extra></extra>'
+            ), row=1, col=1)
+            
+            # Calcular error si se solicita
+            if show_error:
+                # Interpolar df2 a los tiempos de df1 para calcular error punto a punto
+                df2_interp = df2.set_index(time_col2)[field2].reindex(
+                    df1[time_col1], 
+                    method='nearest', 
+                    limit=1,
+                    tolerance=0.1  # Tolerancia de 0.1 segundos
+                ).reset_index()
+                df2_interp.columns = [time_col1, field2]
+                
+                # Calcular error
+                error = df1[field1] - df2_interp[field2]
+                
+                errors_data.append({
+                    'time': df1[time_col1],
+                    'error': error,
+                    'label': label
+                })
+        
+        # Agregar errores al segundo subplot si se solicita
+        if show_error and errors_data:
+            for err_data in errors_data:
+                fig.add_trace(go.Scatter(
+                    x=err_data['time'],
+                    y=err_data['error'],
+                    mode='lines',
+                    name=f"Error {err_data['label']}",
+                    hovertemplate=f"<b>Error {err_data['label']}</b><br>" +
+                                 'Tiempo: %{x:.3f}s<br>' +
+                                 'Error: %{y:.6f}<extra></extra>'
+                ), row=2, col=1)
+            
+            # Agregar línea de cero en el subplot de error
+            if errors_data:
+                time_min = min(err['time'].min() for err in errors_data)
+                time_max = max(err['time'].max() for err in errors_data)
+                fig.add_trace(go.Scatter(
+                    x=[time_min, time_max],
+                    y=[0, 0],
+                    mode='lines',
+                    name='Referencia (0)',
+                    line=dict(color='gray', width=1, dash='dot'),
+                    showlegend=False
+                ), row=2, col=1)
+        
+        # Actualizar layout
+        fig.update_xaxes(title_text="Tiempo (s)", row=n_rows, col=1)
+        fig.update_yaxes(title_text="Valor", row=1, col=1)
+        if show_error:
+            fig.update_yaxes(title_text=error_label, row=2, col=1)
+        
+        fig.update_layout(
+            height=800 if show_error else 550,
+            hovermode='x unified',
+            template='plotly_white',
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.01
+            ),
+            margin=dict(l=60, r=180, t=100, b=60)
+        )
+        
+        if self.verbose:
+            print(f"    [DEBUG] Gráfica de comparación creada exitosamente")
+        
+        return fig
+    
     def create_dashboard(self, csv_files, sim_name, output_dir):
-        """Crea un dashboard HTML único con todas las gráficas."""
+        """Crea un dashboard HTML único con todas las gráficas en el orden especificado."""
         graphs = []
         
         # Crear subdirectorio para gráficas individuales
@@ -343,7 +561,7 @@ class SimulationLogProcessor:
         if self.verbose:
             print(f"\n[DEBUG] Generando gráficas individuales en: {graphs_dir}")
         
-        # Generar TODAS las gráficas individuales primero
+        # Generar gráficas individuales en el orden proporcionado (ya viene ordenado de process_simulation)
         for csv_file in csv_files:
             df = self.load_and_process_csv(csv_file)
             if df is None or len(df) < 2:
@@ -360,20 +578,56 @@ class SimulationLogProcessor:
                 graph_file = graphs_dir / f"{code}_{csv_file.stem}.html"
                 fig.write_html(graph_file)
                 
-                # Guardar info para el dashboard
+                # Guardar info para el dashboard (mantener orden de FILES_TO_PROCESS)
                 graphs.append({
                     'title': title,
                     'code': code,
                     'filename': graph_file.name,
-                    'path': graph_file.relative_to(output_dir)
+                    'path': graph_file.relative_to(output_dir),
+                    'order': FILE_ORDER.get(code, 999)  # Usar orden definido
                 })
                 
                 print(f"  ✓ Gráfica individual creada: {graph_file.name}")
                 
                 if self.verbose:
                     print(f"    [DEBUG] Ruta relativa: {graph_file.relative_to(output_dir)}")
+                    print(f"    [DEBUG] Orden: {FILE_ORDER.get(code, 999)}")
             else:
                 print(f"  ⚠ No se pudo crear gráfica para: {csv_file.name}")
+        
+        # Generar gráficas de comparación
+        if COMPARISON_GRAPHS:
+            print(f"\nGenerando {len(COMPARISON_GRAPHS)} gráfica(s) de comparación...")
+            
+            # Crear diccionario de archivos disponibles por código
+            available_files = {}
+            for csv_file in csv_files:
+                code = self.get_file_code(csv_file.name)
+                available_files[code] = csv_file
+            
+            for comp_idx, comp_config in enumerate(COMPARISON_GRAPHS):
+                fig = self.create_comparison_graph(comp_config, available_files, output_dir)
+                
+                if fig is not None:
+                    # Guardar gráfica de comparación
+                    comp_title = comp_config['title']
+                    safe_title = comp_title.replace(' ', '_').replace(':', '').replace('/', '_')
+                    graph_file = graphs_dir / f"COMP_{comp_idx+1}_{safe_title}.html"
+                    fig.write_html(graph_file)
+                    
+                    # Agregar al dashboard al final (después de gráficas individuales)
+                    graphs.append({
+                        'title': comp_title,
+                        'code': f'COMP{comp_idx+1}',
+                        'filename': graph_file.name,
+                        'path': graph_file.relative_to(output_dir),
+                        'order': 1000 + comp_idx  # Ordenar al final
+                    })
+                    
+                    print(f"  ✓ Gráfica de comparación creada: {graph_file.name}")
+                    
+                    if self.verbose:
+                        print(f"    [DEBUG] Ruta relativa: {graph_file.relative_to(output_dir)}")
         
         if not graphs:
             print("  ⚠ No se generaron gráficas")
@@ -697,7 +951,7 @@ class SimulationLogProcessor:
         return generated_files
     
     def process_simulation(self, sim_path, create_dashboard=True):
-        """Procesa todos los archivos de una simulación."""
+        """Procesa todos los archivos de una simulación según FILES_TO_PROCESS."""
         print(f"\n{'='*60}")
         print(f"Procesando simulación: {sim_path.name}")
         print(f"{'='*60}\n")
@@ -706,51 +960,67 @@ class SimulationLogProcessor:
         output_dir = self.reports_dir / sim_path.name
         output_dir.mkdir(exist_ok=True)
         
-        # Buscar archivos CSV
-        csv_files = list(sim_path.glob('*.csv'))
+        # Buscar todos los archivos CSV disponibles
+        all_csv_files = list(sim_path.glob('*.csv'))
         
-        if not csv_files:
+        if not all_csv_files:
             print("⚠ No se encontraron archivos CSV")
             return
         
-        print(f"Archivos encontrados: {len(csv_files)}\n")
+        print(f"Archivos CSV encontrados: {len(all_csv_files)}\n")
         
-        # Clasificar archivos en parámetros y datos
+        # Crear un diccionario de archivos disponibles por código
+        available_files = {}
+        for csv_file in all_csv_files:
+            code = self.get_file_code(csv_file.name)
+            if code not in available_files:
+                available_files[code] = []
+            available_files[code].append(csv_file)
+        
+        if self.verbose:
+            print(f"[DEBUG] Códigos encontrados: {list(available_files.keys())}\n")
+        
+        # Procesar archivos según el orden definido en FILES_TO_PROCESS
         parm_files = []
         data_files = []
         
-        print("Clasificando archivos...")
-        for csv_file in csv_files:
-            code = self.get_file_code(csv_file.name)
+        print("Procesando archivos según configuración...")
+        for code, title, is_param in FILES_TO_PROCESS:
+            if code not in available_files:
+                if self.verbose:
+                    print(f"  ⊗ {code} - {title} (No encontrado)")
+                continue
             
-            # Primero verificar si está explícitamente marcado como parámetro
-            if self.is_param_file(csv_file.name):
-                parm_files.append(csv_file)
-                print(f"  → {csv_file.name} (Parámetros - por configuración)")
-            # Si no, verificar si tiene datos graficables
-            elif not self.has_plottable_data(csv_file):
-                parm_files.append(csv_file)
-                print(f"  → {csv_file.name} (Parámetros - sin datos numéricos)")
+            # Tomar el primer archivo que coincida con este código
+            csv_file = available_files[code][0]
+            
+            if is_param:
+                parm_files.append((csv_file, title))
+                print(f"  → {csv_file.name} - {title} (Parámetros)")
             else:
-                data_files.append(csv_file)
-                print(f"  → {csv_file.name} (Gráfica)")
+                data_files.append((csv_file, title))
+                print(f"  → {csv_file.name} - {title} (Gráfica)")
         
         print()
         
+        # Procesar archivos de parámetros
         if parm_files:
             print(f"Procesando {len(parm_files)} archivo(s) de parámetros...")
-            for parm_file in parm_files:
-                code = self.get_file_code(parm_file.name)
-                title = FILE_TITLES.get(code, parm_file.stem)
-                self.process_parm_file(parm_file, output_dir, title)
+            for parm_file, title in parm_files:
+                result = self.process_parm_file(parm_file, output_dir, title)
+                if result is None and self.verbose:
+                    print(f"    [DEBUG] No se pudo procesar: {parm_file.name}")
         
         # Procesar archivos de datos
         if data_files:
             print("\nGenerando gráficas...")
+            # Extraer solo los archivos (sin títulos) manteniendo el orden
+            ordered_csv_files = [csv_file for csv_file, _ in data_files]
+            
             if create_dashboard:
-                self.create_dashboard(data_files, sim_path.name, output_dir)
+                self.create_dashboard(ordered_csv_files, sim_path.name, output_dir)
             else:
-                self.create_individual_graphs(data_files, sim_path.name, output_dir)
+                self.create_individual_graphs(ordered_csv_files, sim_path.name, output_dir)
         
         print(f"\n✓ Procesamiento completado")
         print(f"📁 Resultados guardados en: {output_dir}")
@@ -778,11 +1048,14 @@ Ejemplos de uso:
   python process_simulation_logs.py --verbose
 
 Configuración:
-  - FILE_TITLES: Define títulos descriptivos para códigos de 4 letras
-  - PARAM_FILES: Define qué archivos se procesan como texto (ej: GAIN, CONF)
+  - FILES_TO_PROCESS: Lista ordenada que define qué archivos procesar
+    * Formato: (código, título, es_parámetro)
+    * Solo se procesarán archivos definidos en esta lista
+    * El orden en el dashboard respeta el orden de esta lista
+    * es_parámetro=True: archivo se muestra como texto
+    * es_parámetro=False: archivo se grafica
   
-  Los archivos marcados como parámetros se convierten a texto legible,
-  el resto se visualiza como gráficas interactivas.
+  Para agregar nuevos archivos, edita FILES_TO_PROCESS al inicio del script.
         """
     )
     

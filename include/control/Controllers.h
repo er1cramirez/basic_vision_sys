@@ -144,8 +144,8 @@ protected:
     
 public:
     ControllerBase() : velocity_config() {
-        // Log initial velocity planning configuration
-        logVelocityPlanningConfig();
+        // Note: Cannot log here because logger might not be initialized yet
+        // Logging will be done in derived class initialize() method
     }
     virtual ~ControllerBase() = default;
     
@@ -178,20 +178,23 @@ public:
         return velocity_config;
     }
 
-private:
+protected:
     /**
      * @brief Log velocity planning configuration
      */
     void logVelocityPlanningConfig() {
-        UAV::logger().Write("CVGA",
-                            "TimeUS,Cr,Kt,Kz,Smin,Smax",
-                            "Qffffff",
-                            UAV::logger().getMicroseconds(),
-                            velocity_config.cr,
-                            velocity_config.kt,
-                            velocity_config.kz,
-                            velocity_config.s_min,
-                            velocity_config.s_max);
+        // Only log if logger is initialized
+        if (UAV::logger().isInitialized()) {
+            UAV::logger().Write("CVGA",
+                                "TimeUS,Cr,Kt,Kz,Smin,Smax",
+                                "Qfffff",
+                                UAV::logger().getMicroseconds(),
+                                velocity_config.cr,
+                                velocity_config.kt,
+                                velocity_config.kz,
+                                velocity_config.s_min,
+                                velocity_config.s_max);
+        }
     }
 };
 
@@ -223,16 +226,24 @@ public:
         integral_error = Eigen::Vector3d::Zero();
         previous_error = Eigen::Vector3d::Zero();
         last_update_time = std::chrono::steady_clock::now();
-        UAV::logger().Write("VCGA", "TimeUS,Kpx,Kpy,Kpz,Kix,Kiy,Kiz",
-                           "Qffffff", UAV::logger().getMicroseconds(),
-                           kp.x(), kp.y(), kp.z(),
-                           ki.x(), ki.y(), ki.z());
+        // Note: Cannot log here because logger might not be initialized yet
+        // Logging moved to initialize() method
     }
     
     ~VelocityPIController() override = default;
     
     bool initialize() override {
         reset();
+        
+        // Log velocity planning configuration from base class
+        logVelocityPlanningConfig();
+        
+        // Log controller gains
+        UAV::logger().Write("VCGA", "TimeUS,Kpx,Kpy,Kpz,Kix,Kiy,Kiz",
+                           "Qffffff", UAV::logger().getMicroseconds(),
+                           kp.x(), kp.y(), kp.z(),
+                           ki.x(), ki.y(), ki.z());
+        
         return true;
     }
     

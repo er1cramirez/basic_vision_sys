@@ -366,7 +366,7 @@ void GzOdometrySource::loggingThread() {
             Logger::getInstance().Write(
                 "GTDP",
                 "TimeUS,x,y,z,vx,vy,vz",
-                "Qdddddd",
+                "Qffffff",
                 timestamp,
                 x_ap, y_ap, z_ap,
                 vx_ap, vy_ap, vz_ap
@@ -384,7 +384,7 @@ void GzOdometrySource::loggingThread() {
             Logger::getInstance().Write(
                 "GTPP",
                 "TimeUS,x,y,z,vx,vy,vz",
-                "Qdddddd",
+                "Qffffff",
                 timestamp,
                 x_ap, y_ap, z_ap,
                 vx_ap, vy_ap, vz_ap
@@ -399,8 +399,8 @@ void GzOdometrySource::loggingThread() {
             
             Logger::getInstance().Write(
                 "GTPR",
-                "TimeUS,dx,dy,dz",
-                "Qddd",
+                "TimeUS,Pr_x,Pr_y,Pr_z",
+                "Qfff",
                 timestamp,
                 dx_ap, dy_ap, dz_ap
             );
@@ -414,8 +414,8 @@ void GzOdometrySource::loggingThread() {
             
             Logger::getInstance().Write(
                 "GTVR",
-                "TimeUS,dvx,dvy,dvz",
-                "Qddd",
+                "TimeUS,Vr_x,Vr_y,Vr_z",
+                "Qfff",
                 timestamp,
                 dvx_ap, dvy_ap, dvz_ap
             );
