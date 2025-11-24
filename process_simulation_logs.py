@@ -8,46 +8,21 @@ from datetime import datetime
 
 # Diccionario para nombres descriptivos de archivos
 FILE_TITLES = {
-    # Archivos de inicialización y estado
-    'INIT': 'Inicialización de Componentes',
-    'STAT': 'Estado del Sistema',
     
     # Orientación y posición
     'QUAT': 'Cuaterniones y Ángulos',
     'ARUC': 'Detección ArUco(Sin transformación)',
     'POST': 'Posición del Target(Con transformación)',
-    
-    # Procesamiento de imágenes
-    'FRAM': 'Información de Frames',
-    
-    # Control visual
     'CVGA': 'Ganancias de Control Visual',
     'CVDS': 'Velocidad Deseada',
     'VCPX': 'Control Velocidad Eje X',
     'VCPY': 'Control Velocidad Eje Y',
     'VCPZ': 'Control Velocidad Eje Z',
-    
-    # Controladores PID
     'CPUX': 'Salida Control  X',
     'CPUY': 'Salida Control  Y',
     'CPUZ': 'Salida Control  Z',
-    'CPRM': 'Resumen Control ',
-    
-    # Control y estado
-    'CTRL': 'Señales de Control',
     'EKFS': 'Estado EKF',
     
-    # Otros códigos genéricos
-    'PARM': 'Parámetros de Configuración',
-    'GAIN': 'Ganancias de Control',
-    'CONF': 'Configuración',
-    'TUNE': 'Parámetros de Ajuste',
-    'SENS': 'Datos de Sensores',
-    'TRAJ': 'Trayectoria',
-    'ERRR': 'Errores',
-    'PERF': 'Métricas de Performance',
-    'POSE': 'Posición y Orientación',
-    # Agrega más códigos según tus necesidades
 }
 
 # Diccionario para identificar archivos que deben procesarse como texto

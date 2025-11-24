@@ -130,6 +130,31 @@ private:
                                    double qw, double qx, double qy, double qz,
                                    double& vx_world, double& vy_world, double& vz_world);
     
+    /**
+     * @brief Transform coordinates from Gazebo frame to ArduPilot (NED) frame
+     * @param x_gz, y_gz, z_gz: coordinates in Gazebo frame (X forward, Y left, Z up)
+     * @param x_ap, y_ap, z_ap: output coordinates in ArduPilot frame (X forward, Y right, Z down)
+     *
+     * We convert Gazebo (ENU-like: X forward, Y left, Z up) to ArduPilot NED by the
+     * following mapping (right-handed, det=+1):
+     * - X_ardupilot =  Y_gazebo
+     * - Y_ardupilot =  X_gazebo
+     * - Z_ardupilot = -Z_gazebo
+     */
+    void transformGazeboToArduPilot(double x_gz, double y_gz, double z_gz,
+                                    double& x_ap, double& y_ap, double& z_ap);
+
+    /**
+     * @brief Transform orientation quaternion from Gazebo frame to ArduPilot frame
+     * @param qw,qx,qy,qz: input quaternion (Gazebo world frame)
+     * @param qw_out,qx_out,qy_out,qz_out: output quaternion in ArduPilot world frame
+     *
+     * The conversion is performed by conjugation with the fixed frame rotation S
+     * that maps Gazebo axes to ArduPilot axes: q_out = q_S * q_in * q_S^{-1}.
+     */
+    void transformQuaternionGazeboToArduPilot(double qw, double qx, double qy, double qz,
+                                              double& qw_out, double& qx_out, double& qy_out, double& qz_out);
+    
     // Configuration
     Config config;
     

@@ -31,7 +31,7 @@ struct VelocityPlanningConfig {
     
     // Default constructor with default values
     VelocityPlanningConfig() 
-        : cr(0.6), kt(0.3), kz(2.0), s_min(2.5), s_max(4.0) {}
+        : cr(0.2), kt(0.4), kz(2.0), s_min(2.5), s_max(4.0) {}
     
     // Constructor with custom values
     VelocityPlanningConfig(double cr_, double kt_, double kz_, double s_min_, double s_max_)
@@ -67,10 +67,10 @@ inline DesiredVelocityResult computeDesiredVelocity(const EKFStateResult& state,
     // s_dot = -s_max * kz * exp(-kz * h) * state.velocity.z();
     double s_dot = -config.s_max * config.kz * std::exp(-config.kz * h) * state.velocity.z();
     // Vectorial distance to target
-    Eigen::Vector3d d_vector = -state.position;
+    Eigen::Vector3d d_vector = state.position;
     // discard the z component
     d_vector.z() = 0;
-    Eigen::Vector3d d_vector_dot = -state.velocity;
+    Eigen::Vector3d d_vector_dot = state.velocity;
     // discard the z component
     d_vector_dot.z() = 0;
 
@@ -96,7 +96,7 @@ inline DesiredVelocityResult computeDesiredVelocity(const EKFStateResult& state,
     Eigen::Vector3d R_dot = (d_vector_dot - _R * d_dot) / d;
 
     // Tangential unity vector (z axis)
-    Eigen::Vector3d _T = Eigen::Vector3d(0, 0, -1);
+    Eigen::Vector3d _T = Eigen::Vector3d(0, 0, 1);
 
     // Radial velocity regulator mu_r = tanh(d)
     double mu_r = std::tanh(s * d);
@@ -217,7 +217,7 @@ private:
     Eigen::Vector3d ki;
     
 public:
-    VelocityPIController(const Eigen::Vector3d& proportional_gain = Eigen::Vector3d(-0.01, -0.02, 0.04), 
+    VelocityPIController(const Eigen::Vector3d& proportional_gain = Eigen::Vector3d(-0.01, -0.01, -0.08), 
                         const Eigen::Vector3d& integral_gain = Eigen::Vector3d(0.0, 0.0, 0.0)) 
         : kp(proportional_gain), ki(integral_gain), has_previous_error(false) {
         integral_error = Eigen::Vector3d::Zero();
@@ -291,17 +291,19 @@ public:
         DesiredVelocityResult desired = computeDesiredVelocity(state, target, velocity_config);
         
         // Calculate velocity error and its derivative PER AXIS for debugging
-        Eigen::Vector3d error = state.velocity - desired.v_desired;
-        Eigen::Vector3d error_dot = state.acceleration - desired.v_desired_dot;
-        
+        Eigen::Vector3d v_drone = -state.velocity;
+        Eigen::Vector3d a_drone = -state.acceleration;
+
+        Eigen::Vector3d error = v_drone - desired.v_desired;
+        Eigen::Vector3d error_dot = a_drone - desired.v_desired_dot;
         // Debug: Separate calculations by axis
-        double error_x = error.x();
-        double error_y = error.y(); 
-        double error_z = error.z();
+        double error_x = v_drone.x() - desired.v_desired.x();
+        double error_y = v_drone.y() - desired.v_desired.y();
+        double error_z = v_drone.z() - desired.v_desired.z();
         
-        double error_dot_x = error_dot.x();
-        double error_dot_y = error_dot.y();
-        double error_dot_z = error_dot.z();
+        double error_dot_x = a_drone.x() - desired.v_desired_dot.x();
+        double error_dot_y = a_drone.y() - desired.v_desired_dot.y();
+        double error_dot_z = a_drone.z() - desired.v_desired_dot.z();
 
         // Update integral term only if dt is reasonable
         if (dt > 0.0 && dt < 0.1) { // Avoid integration if dt is too large (likely first call or long pause)
@@ -396,6 +398,10 @@ public:
             u_desired_dot_z = 0.0;  // No acceleration during final landing phase
         }
         
+        // Debug control outputs by axis
+        // u_desired_x = 0.0;
+        // u_desired_y = 0.0015;
+        // u_desired_z = 0.01;
         // Assemble final output
         output.u_desired = Eigen::Vector3d(u_desired_x, u_desired_y, u_desired_z);
         output.u_desired_dot = Eigen::Vector3d(u_desired_dot_x, u_desired_dot_y, u_desired_dot_z);
@@ -405,13 +411,13 @@ public:
         // Control performance by axis
         UAV::logger().Write("VCPX", "TimeUS,Vd_x,V_x,Verr_x",
                            "Qfff", UAV::logger().getMicroseconds(),
-                           desired.v_desired.x(), state.velocity.x(), error_x);
+                           desired.v_desired.x(), -state.velocity.x(), error_x);
         UAV::logger().Write("VCPY", "TimeUS,Vd_y,V_y,Verr_y",
                            "Qfff", UAV::logger().getMicroseconds(),
-                           desired.v_desired.y(), state.velocity.y(), error_y);
+                           desired.v_desired.y(), -state.velocity.y(), error_y);
         UAV::logger().Write("VCPZ", "TimeUS,Vd_z,V_z,Verr_z",
                            "Qfff", UAV::logger().getMicroseconds(),
-                           desired.v_desired.z(), state.velocity.z(), error_z);
+                           desired.v_desired.z(), -state.velocity.z(), error_z);
 
         // Log control commands by axis
         UAV::logger().Write("CPUX", "TimeUS,Ux,Px,Ix",

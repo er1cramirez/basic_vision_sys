@@ -206,16 +206,16 @@ void GzOdometrySource::calculateRelative() {
     // Calculate relative position: platform - drone
     // This gives the position of the platform as seen from the drone
     // (but expressed in world frame coordinates)
-    relativeData.dx = droneData.x - platformData.x;
-    relativeData.dy = droneData.y - platformData.y;
-    relativeData.dz = droneData.z - platformData.z;
+    relativeData.dx = platformData.x - droneData.x;
+    relativeData.dy = platformData.y - droneData.y;
+    relativeData.dz = platformData.z - droneData.z;
 
     // Calculate relative velocity: platform - drone
     // This gives the velocity of the platform relative to the drone
     // (expressed in world frame coordinates)
-    relativeData.dvx = droneData.vx - platformData.vx;
-    relativeData.dvy = droneData.vy - platformData.vy;
-    relativeData.dvz = droneData.vz - platformData.vz;
+    relativeData.dvx = platformData.vx - droneData.vx;
+    relativeData.dvy = platformData.vy - droneData.vy;
+    relativeData.dvz = platformData.vz - droneData.vz;
 
     relativeData.valid = true;
 }
@@ -255,6 +255,74 @@ void GzOdometrySource::transformVelocityToWorld(double vx_body, double vy_body, 
     vz_world = r20*vx_body + r21*vy_body + r22*vz_body;
 }
 
+void GzOdometrySource::transformGazeboToArduPilot(double x_gz, double y_gz, double z_gz,
+                                                   double& x_ap, double& y_ap, double& z_ap) {
+    // Transform from Gazebo frame to ArduPilot (NED) frame
+    // Gazebo: X forward, Y left, Z up
+    // ArduPilot (NED): X forward, Y right, Z down
+    // Mapping (right-handed):
+    //   X_ardupilot =  Y_gazebo
+    //   Y_ardupilot =  X_gazebo
+    //   Z_ardupilot = -Z_gazebo
+    x_ap = y_gz;
+    y_ap = x_gz;
+    z_ap = -z_gz;
+}
+
+void GzOdometrySource::transformQuaternionGazeboToArduPilot(double qw, double qx, double qy, double qz,
+                                                            double& qw_out, double& qx_out, double& qy_out, double& qz_out) {
+    // Normalize input quaternion
+    double norm = std::sqrt(qw*qw + qx*qx + qy*qy + qz*qz);
+    if (norm > 0.0) {
+        qw /= norm; qx /= norm; qy /= norm; qz /= norm;
+    }
+
+    // Fixed frame rotation S that maps Gazebo->ArduPilot (see header comment)
+    // We precompute q_S. From decomposition S = R_x(180deg) * R_z(-90deg)
+    // q_S = (0, 1/sqrt(2), 1/sqrt(2), 0)
+    const double s = 0.70710678118654752440; // 1/sqrt(2)
+    const double qs_w = 0.0;
+    const double qs_x = s;
+    const double qs_y = s;
+    const double qs_z = 0.0;
+
+    // Quaternion multiplication helper: r = a * b
+    auto quatMul = [](double aw, double ax, double ay, double az,
+                      double bw, double bx, double by, double bz,
+                      double& rw, double& rx, double& ry, double& rz){
+        rw = aw*bw - ax*bx - ay*by - az*bz;
+        rx = aw*bx + ax*bw + ay*bz - az*by;
+        ry = aw*by - ax*bz + ay*bw + az*bx;
+        rz = aw*bz + ax*by - ay*bx + az*bw;
+    };
+
+    // q_mid = q_S * q_in
+    double mid_w, mid_x, mid_y, mid_z;
+    quatMul(qs_w, qs_x, qs_y, qs_z, qw, qx, qy, qz, mid_w, mid_x, mid_y, mid_z);
+
+    // q_S inverse (unit quaternion -> conjugate)
+    const double qsi_w = qs_w;
+    const double qsi_x = -qs_x;
+    const double qsi_y = -qs_y;
+    const double qsi_z = -qs_z;
+
+    // q_out = q_mid * q_S^{-1}
+    double out_w, out_x, out_y, out_z;
+    quatMul(mid_w, mid_x, mid_y, mid_z, qsi_w, qsi_x, qsi_y, qsi_z, out_w, out_x, out_y, out_z);
+
+    // Normalize output
+    double out_norm = std::sqrt(out_w*out_w + out_x*out_x + out_y*out_y + out_z*out_z);
+    if (out_norm > 0.0) {
+        qw_out = out_w / out_norm;
+        qx_out = out_x / out_norm;
+        qy_out = out_y / out_norm;
+        qz_out = out_z / out_norm;
+    } else {
+        // Fallback: identity
+        qw_out = 1.0; qx_out = 0.0; qy_out = 0.0; qz_out = 0.0;
+    }
+}
+
 void GzOdometrySource::loggingThread() {
     std::cout << "GzOdometrySource: Logging thread running" << std::endl;
     
@@ -287,49 +355,69 @@ void GzOdometrySource::loggingThread() {
             relativeSnapshot = relativeData;
         }
         
-        // Log drone data (GTDP)
+        // Log drone data (GTDP) - transformed to ArduPilot frame
         if (config.logRawData && droneSnapshot.valid) {
+            double x_ap, y_ap, z_ap, vx_ap, vy_ap, vz_ap;
+            transformGazeboToArduPilot(droneSnapshot.x, droneSnapshot.y, droneSnapshot.z,
+                                       x_ap, y_ap, z_ap);
+            transformGazeboToArduPilot(droneSnapshot.vx, droneSnapshot.vy, droneSnapshot.vz,
+                                       vx_ap, vy_ap, vz_ap);
+            
             Logger::getInstance().Write(
                 "GTDP",
-                "timestamp_us,x,y,z,vx,vy,vz",
+                "TimeUS,x,y,z,vx,vy,vz",
                 "Qdddddd",
                 timestamp,
-                droneSnapshot.x, droneSnapshot.y, droneSnapshot.z,
-                droneSnapshot.vx, droneSnapshot.vy, droneSnapshot.vz
+                x_ap, y_ap, z_ap,
+                vx_ap, vy_ap, vz_ap
             );
         }
         
-        // Log platform data (GTPP)
+        // Log platform data (GTPP) - transformed to ArduPilot frame
         if (config.logRawData && platformSnapshot.valid) {
+            double x_ap, y_ap, z_ap, vx_ap, vy_ap, vz_ap;
+            transformGazeboToArduPilot(platformSnapshot.x, platformSnapshot.y, platformSnapshot.z,
+                                       x_ap, y_ap, z_ap);
+            transformGazeboToArduPilot(platformSnapshot.vx, platformSnapshot.vy, platformSnapshot.vz,
+                                       vx_ap, vy_ap, vz_ap);
+            
             Logger::getInstance().Write(
                 "GTPP",
-                "timestamp_us,x,y,z,vx,vy,vz",
+                "TimeUS,x,y,z,vx,vy,vz",
                 "Qdddddd",
                 timestamp,
-                platformSnapshot.x, platformSnapshot.y, platformSnapshot.z,
-                platformSnapshot.vx, platformSnapshot.vy, platformSnapshot.vz
+                x_ap, y_ap, z_ap,
+                vx_ap, vy_ap, vz_ap
             );
         }
         
-        // Log relative position (GTPR)
+        // Log relative position (GTPR) - transformed to ArduPilot frame
         if (config.logRelativeData && relativeSnapshot.valid) {
+            double dx_ap, dy_ap, dz_ap;
+            transformGazeboToArduPilot(relativeSnapshot.dx, relativeSnapshot.dy, relativeSnapshot.dz,
+                                       dx_ap, dy_ap, dz_ap);
+            
             Logger::getInstance().Write(
                 "GTPR",
-                "timestamp_us,dx,dy,dz",
+                "TimeUS,dx,dy,dz",
                 "Qddd",
                 timestamp,
-                relativeSnapshot.dx, relativeSnapshot.dy, relativeSnapshot.dz
+                dx_ap, dy_ap, dz_ap
             );
         }
         
-        // Log relative velocity (GTVR)
+        // Log relative velocity (GTVR) - transformed to ArduPilot frame
         if (config.logRelativeData && relativeSnapshot.valid) {
+            double dvx_ap, dvy_ap, dvz_ap;
+            transformGazeboToArduPilot(relativeSnapshot.dvx, relativeSnapshot.dvy, relativeSnapshot.dvz,
+                                       dvx_ap, dvy_ap, dvz_ap);
+            
             Logger::getInstance().Write(
                 "GTVR",
-                "timestamp_us,dvx,dvy,dvz",
+                "TimeUS,dvx,dvy,dvz",
                 "Qddd",
                 timestamp,
-                relativeSnapshot.dvx, relativeSnapshot.dvy, relativeSnapshot.dvz
+                dvx_ap, dvy_ap, dvz_ap
             );
         }
     }

@@ -96,7 +96,18 @@ void MavlinkCommModule::stop() {
     
     // Set running flag to false to stop threads
     running_ = false;
-    
+
+    // Stop the port first to unblock any blocking recvfrom/read calls
+    // in the receive thread. Closing the socket will cause the blocking
+    // read to return with an error and the thread to exit its loop.
+    if (port_ && port_->is_running()) {
+        try {
+            port_->stop();
+        } catch (...) {
+            // Ensure we proceed to join threads even if stop throws
+        }
+    }
+
     // Join threads if they're joinable
     if (send_thread_.joinable()) {
         send_thread_.join();
@@ -105,12 +116,7 @@ void MavlinkCommModule::stop() {
     if (receive_thread_.joinable()) {
         receive_thread_.join();
     }
-    
-    // Stop port
-    if (port_ && port_->is_running()) {
-        port_->stop();
-    }
-    
+
     std::cout << "MAVLink communication stopped" << std::endl;
 }
 
